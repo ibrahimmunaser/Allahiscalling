@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Time Sensitive Notifications: lets prayer reminders break through
+	     Focus modes and scheduled summaries. Required for
+	     InterruptionLevel.timeSensitive to take effect; without it iOS
+	     silently downgrades delivery to ordinary notifications.
+	     The provisioning profile / signing team must also support this
+	     capability (verify in Xcode: Runner > Signing & Capabilities). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+</dict>
+</plist>
