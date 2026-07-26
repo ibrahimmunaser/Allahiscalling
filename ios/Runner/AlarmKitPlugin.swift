@@ -218,8 +218,16 @@ final class AlarmKitPlugin: NSObject, FlutterPlugin {
     // Replace any existing alarm with this id (prevents duplicates on reschedule).
     try? AlarmManager.shared.cancel(id: uuid)
 
-    // System supplies the stop/Dismiss control; customize only the Answer
-    // secondary button (non-deprecated Alert initializer).
+    // NOTE: AlarmPresentation.Alert.init(title:secondaryButton:secondaryButtonBehavior:)
+    // (implicit system stop button) is iOS 26.1+ only. To support iOS 26.0 at
+    // launch we use the iOS 26.0-compatible init(title:stopButton:secondaryButton:
+    // secondaryButtonBehavior:) overload and supply our own Dismiss stop button,
+    // matching Apple's WWDC25 "Wake up to the AlarmKit API" sample exactly.
+    let stopButton = AlarmButton(
+      text: "Dismiss",
+      textColor: .white,
+      systemImageName: "stop.circle"
+    )
     let answerButton = AlarmButton(
       text: "Answer",
       textColor: .white,
@@ -227,6 +235,7 @@ final class AlarmKitPlugin: NSObject, FlutterPlugin {
     )
     let alertPresentation = AlarmPresentation.Alert(
       title: LocalizedStringResource(stringLiteral: alertTitle),
+      stopButton: stopButton,
       secondaryButton: answerButton,
       secondaryButtonBehavior: .custom
     )
