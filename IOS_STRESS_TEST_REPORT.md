@@ -3,6 +3,7 @@
 **Audit date:** 2026-07-24 (America/New_York)  
 **Fix-pass date:** 2026-07-25 (America/New_York) — see [§1a](#1a-fix-pass-update-2026-07-25)  
 **Follow-up date:** 2026-07-25, later same day — see [§1b](#1b-follow-up-2026-07-25-android-verification--ios-release-gate--alarmkit-entitlement-correction)  
+**Mac compile validation date:** 2026-07-25, later still (MacinCloud, Xcode 26) — see [§1c](#1c-mac-compile-validation-2026-07-25-macincloud--xcode-26--macos-sequoia-15737)  
 **Host:** Windows 11 Pro (no Xcode, no iOS Simulator, no physical iPhone)  
 **Flutter:** 3.44.7 stable / Dart 3.12.2  
 **App version (Generated.xcconfig):** 1.0.3+4  
@@ -40,7 +41,7 @@ Windows unit tests cannot certify AlarmKit, lock-screen alerts, Answer from term
 | H4 | Native bookkeeping uses a UserDefaults array, not `AlarmManager.shared.alarms` | **Not in scope for this pass** (native Swift; no Mac to validate a change safely). Unchanged. | — |
 | H5 | Fixed AlarmKit schedule vs zoned local notifications (DST/travel semantics) | **Not in scope for this pass** (would require native AlarmKit API changes only verifiable on a Mac). Unchanged. | — |
 | H6 | No `PrivacyInfo.xcprivacy` | Added `ios/Runner/PrivacyInfo.xcprivacy`, declaring only what this app's own Swift code actually does: `NSPrivacyAccessedAPICategoryUserDefaults` / reason `CA92.1` for the AlarmKit Answer-bridge and alarm-ID tracking in `UserDefaults.standard`. No fabricated declarations (file-timestamp / disk-space / boot-time / keyboard APIs are not used anywhere in this target's own code and are deliberately omitted). Referenced in the Runner target's Resources build phase in `project.pbxproj`. | Manual audit of `AlarmKitPlugin.swift` / `AnswerPrayerAlarmIntent.swift`; XML well-formedness checked (cannot run `plutil`/Xcode's privacy-report tooling on Windows — recheck in Xcode's own privacy report on first Mac build) |
-| H7 | `IPHONEOS_DEPLOYMENT_TARGET = 12.0` vs Time Sensitive (15+) / AlarmKit (26) | **Not in scope** (explicitly restricted: "do not update … deployment targets"). Unchanged; both capabilities already degrade gracefully at runtime without raising the floor. | — |
+| H7 | `IPHONEOS_DEPLOYMENT_TARGET = 12.0` vs Time Sensitive (15+) / AlarmKit (26) | **Not in scope for this pass** (explicitly restricted: "do not update … deployment targets"). *(Later resolved in §1c: raised to 13.0 by explicit user decision, once Mac validation showed 12.0 no longer builds with current Flutter/CocoaPods anyway.)* | — |
 | H8 | Polar high-latitude times could be unordered / cross incorrectly (Tromsø) | `PrayerTimeService` now validates every computed day's chronological sequence (`_isChronologicallyValid`, midnight-crossing aware). When direct computation for the requested day is invalid, it searches nearby days for the nearest one that *is* valid and re-stamps that day's time-of-day pattern onto the requested date ("Aqrab al-Ayyam" substitution) rather than just sorting mislabeled times. If no valid sequence can be found in the search window, it throws `PrayerCalculationException` instead of silently scheduling an incorrect alarm. Uses `adhan_dart`'s own supported `HighLatitudeRule` options — no invented math. | `test/prayer_calculation_stress_test.dart`: Tromsø summer/winter solstice (now chronologically valid, previously "KNOWN DEFECT"), Tromsø midnight-crossing Isha, every `HighLatitudeRuleOption` across both solstices, America/Detroit spring-forward/fall-back single days and full weeks, and every `CalculationMethodOption` × `AsrMethod` combination across Detroit/London/Makkah/Tromsø — all pass |
 | H9 | Empty `RunnerTests` — zero native XCTest coverage | **Not in scope / cannot be executed on Windows.** No native Swift test coverage is claimed by this pass — see "Any failed or unexecuted tests" below. | — (requires Mac) |
 | H10 | No custom prayer sounds bundled; AlarmKit always `.default` | **Not in scope for this pass** (Medium/product decision in the proposed-fixes doc, not part of the Critical/High list actioned here). Unchanged. | — |
@@ -182,6 +183,34 @@ Research done this pass (see `IOS_ALARMKIT_ENTITLEMENT.md`, fully rewritten):
 ### What could not be executed from this environment
 
 The user's requested next steps — running `tool/ios_mac_validation.sh` for real, compiling Debug/Release in Xcode 26, building an Archive, testing on a physical iOS 26+ iPhone (locked/terminated/Silent/Focus/Answer/Dismiss/fallback), and uploading to TestFlight — **all require a Mac with Xcode and a physical iOS 26+ device, neither of which exists in this environment.** None of these were run, and none are claimed to have been run. `tool/ios_mac_validation.sh` was updated (new release-gate sanity check, corrected AlarmKit guidance) so it is ready to execute as soon as a Mac is available; it has not been executed.
+
+---
+
+## 1c. Mac compile validation (2026-07-25, MacinCloud — Xcode 26 / macOS Sequoia 15.7.3)
+
+A rented Mac (MacinCloud managed server, macOS Sequoia 15.7.3) was used to actually run the compile-time checks that §1a/§1b could not. **This section only covers compilation and the release gate — it does NOT cover Archive/codesign, TestFlight, or physical-device AlarmKit behavior (Answer/Dismiss/lock-screen/terminated-state), which still require a provisioning profile and a physical iOS 26+ iPhone and were not attempted.**
+
+### What was actually run and confirmed
+
+1. **CocoaPods integration fixed.** `ios/Flutter/Debug.xcconfig` / `Release.xcconfig` were missing the `#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.{debug,release}.xcconfig"` line, which `flutter create`-generated iOS projects normally have. Without it, `pod install`'s settings never reach the Xcode build, causing plugin build failures. Added both lines (comment-only build-setting includes; no signing, capability, or deployment-target change).
+2. **`AlarmKitPlugin.swift` targeted an iOS-26.1-only API on an iOS-26.0 minimum.** `AlarmPresentation.Alert.init(title:secondaryButton:secondaryButtonBehavior:)` (implicit system stop button) is only available starting iOS 26.1; building against the iOS 26.0 SDK floor failed with `'init(...)' is only available in iOS 26.1 or newer`. Fixed by switching to the iOS-26.0-compatible `init(title:stopButton:secondaryButton:secondaryButtonBehavior:)` overload with an explicit `Dismiss` `AlarmButton`, matching Apple's WWDC25 "Wake up to the AlarmKit API" sample exactly. No behavior change — same Answer/Dismiss buttons — just a wider SDK floor.
+3. **`flutter build ios --debug --no-codesign`** — **succeeded** (`✓ Built build/ios/iphoneos/Runner.app`).
+4. **`flutter build ios --profile --no-codesign`** — **succeeded** ("Xcode build done." in 12.6s).
+5. **Release-gate negative test:** `flutter build ios --release --no-codesign` **with no `--dart-define`s** — **failed as designed**, with `error: RELEASE CONFIGURATION INVALID (build stopped before packaging): PRIVACY_POLICY_URL is missing or not a valid https URL … SUPPORT_EMAIL is missing or invalid`, sourced from the new `check_release_config.sh` Xcode Run Script phase (§1b item 2). This is the first real confirmation, on real Xcode, that the packaging-time gate actually fires and actually blocks the build (previously only reasoned about statically from Windows).
+6. **Release-gate positive test:** `flutter build ios --release --no-codesign --dart-define=PRIVACY_POLICY_URL=https://… --dart-define=SUPPORT_EMAIL=support@…` — **succeeded** (`✓ Built build/ios/iphoneos/Runner.app (36.1MB)`, "Xcode build done." in 32.6s), confirming the gate does not falsely block a well-formed release configuration.
+
+So: **Debug, Profile, and Release (gated) all now compile successfully against the real Xcode 26 / iOS 26 SDK**, including the AlarmKit plugin code, with the release build-time privacy gate proven to both block invalid config and allow valid config.
+
+### Caveats / what this does NOT prove
+
+- **No code signing was exercised** (`--no-codesign` was used throughout, since no provisioning profile/Apple Developer team is configured on this rented Mac). Archive, TestFlight upload, and any entitlement-driven signing behavior remain unverified.
+- **No physical device or Simulator run.** AlarmKit's actual runtime behavior — authorization prompt, whether `AlarmManager.requestAuthorization()` succeeds without a special entitlement (the open question from `IOS_ALARMKIT_ENTITLEMENT.md`), lock-screen alert rendering, Answer/Dismiss from a terminated app, Silent/Focus-mode interruption — is **still completely unverified**. This section closes the "does it even compile against the real SDK" gap, nothing more.
+- **`IPHONEOS_DEPLOYMENT_TARGET` raised from 12.0 to 13.0 — now committed.** This was first bumped experimentally only on the Mac clone to get `pod install` to resolve (current Flutter/plugin versions require ≥13.0). After confirming the compile results above, the user explicitly approved raising the floor for real (iOS 12 devices are effectively extinct in 2026), so `ios/Runner.xcodeproj/project.pbxproj` (all three build configs) and `ios/Flutter/AppFrameworkInfo.plist` were updated to `13.0` and committed. This supersedes the original "do not update deployment targets" restriction for this one setting, by explicit user decision, because the alternative (pinning old plugin versions indefinitely) was worse. Time Sensitive Notifications (15+) and AlarmKit (26+) both still degrade gracefully at runtime below their respective floors, unchanged.
+- **`jarsigner`-style post-build artifact verification was not applicable here** (no signing); only build success/failure and the release-gate's stdout were checked.
+
+### Updated verdict after §1c
+
+**Still not release-ready for iOS** — Archive, TestFlight, and all physical-device AlarmKit behavior remain untested. What changed: the app (with every Critical/High Dart-side fix from §1a/§1b applied) is now confirmed to actually **compile** against Xcode 26 in Debug, Profile, and Release, and the release packaging gate is confirmed to work correctly in both directions on real tooling — closing the single largest "we can't even prove this compiles" risk called out in §1/§1a/§1b. The remaining gates (§10–14: Archive + codesign, physical-device destruction matrix, TestFlight, on-device AlarmKit authorization) are unchanged and still block a release claim.
 
 ---
 
@@ -484,7 +513,7 @@ Still zero / absent from lcov (unchanged — never imported by tests): `main.dar
 | Item | Status |
 |------|--------|
 | AlarmKit Swift in Runner Sources | **Pass** (all three files) |
-| `IPHONEOS_DEPLOYMENT_TARGET` | 12.0 (Debug/Release/Profile) |
+| `IPHONEOS_DEPLOYMENT_TARGET` | 12.0 at time of original audit; **raised to 13.0 in §1c** (2026-07-25) |
 | Bundle ID | `com.salahinvite.allahInvitesYouToSalah` |
 | `DEVELOPMENT_TEAM` | Not set in repo |
 | Podfile | **None** (Flutter SwiftPM mode) |
@@ -608,7 +637,7 @@ See also `IOS_PROPOSED_FIXES_FOR_APPROVAL.md`.
 4. ~~**C4:** Ensure CI/Xcode schemes always pass privacy dart-define.~~ **Done — see §1b: this is now a hard packaging-time gate on both platforms (Gradle for Android, a new Xcode Run Script build phase for iOS), not just a runtime warning or a manual script.**
 5. ~~**H6:** Add `PrivacyInfo.xcprivacy`.~~ **Done — see §1a.**
 6. **H10:** Bundle prayer sounds or drop product claim; wire `preferredSoundName`. **Not actioned — Medium/product scope, not part of the Critical/High list actioned this pass.**
-7. **H7:** Raise deployment target to a supported floor (15+ or 26-aware). **Not actioned — explicitly restricted ("do not update … deployment targets").**
+7. **H7:** Raise deployment target to a supported floor (15+ or 26-aware). **Not actioned in §1a ("do not update … deployment targets"); later raised to 13.0 in §1c by explicit user decision** (forced by current Flutter/CocoaPods minimums, not fully to 15+/26 — Time Sensitive and AlarmKit still degrade gracefully below their own floors).
 8. ~~**H8:** High-latitude UX guard / alternative rule messaging.~~ **Done differently — fixed the calculation itself (Aqrab al-Ayyam fallback + chronological validation) rather than just adding UX messaging around a known-bad result. See §1a.**
 9. **H9:** Native XCTest for channel + intent payload. **Not actioned — requires a Mac; no native Swift test coverage is claimed.**
 10. **M1:** Clear pending Answer only after successful navigation. **Not actioned — Medium scope, not part of the Critical/High list actioned this pass.**
@@ -660,7 +689,7 @@ See also `IOS_PROPOSED_FIXES_FOR_APPROVAL.md`.
 | NSAlarmKitUsageDescription | Pass | Pass (unchanged) |
 | AlarmKit entitlement in repo | Fail | **Deliberately still absent** — see C1 in §1a; documented, not a defect |
 | Privacy manifest | Fail (missing) | **Pass** — `PrivacyInfo.xcprivacy` added |
-| Deployment target 12 vs AlarmKit 26 | Fail / risk | Unchanged (out of scope — restricted from changing deployment targets) |
+| Deployment target 12 vs AlarmKit 26 | Fail / risk | **Resolved in §1c** — raised to 13.0 (committed); Time Sensitive (15+) and AlarmKit (26+) still degrade gracefully below their own floors |
 | Sound assets | Fail vs "selected sound" claim | Unchanged (out of scope — Medium/product decision, not actioned) |
 
 ---
@@ -672,3 +701,5 @@ See also `IOS_PROPOSED_FIXES_FOR_APPROVAL.md`.
 **2026-07-25, after this fix pass:** 339 green Windows unit tests **still** do not mean the iOS app works on a device — that has not changed and cannot change without a Mac. What *has* changed: the specific defect this report called out most sharply — **"a schedule-failure mode that can delete primary reminders without fallback"** — is fixed and covered by tests that fail if it regresses (`test/ios_hybrid_notification_scheduler_test.dart`, `test/scheduling_torture_test.dart`'s partial-failure tests). The hybrid persistence/cancellation gaps (H1–H3), the release-crash risk (C4), the missing privacy manifest (H6), and the high-latitude calculation defect (H8) are all fixed the same way — root-caused and tested, not just documented as known issues. No AlarmKit entitlement has been added — the local-notification fallback carries every prayer alert correctly regardless. **Ship iOS only after Mac Archive + the physical destruction matrix in §11 pass with recorded firing logs** — that gate is unchanged.
 
 **2026-07-25, later same day (§1b):** Android was actually verified, not just inferred — a genuinely signed release `.aab` was built and `jarsigner`-verified, plus 252 core scheduling tests re-run in isolation. The privacy-URL gate is now a hard packaging-time failure on iOS too (a new Xcode Run Script build phase), not just a non-crashing runtime warning. And the AlarmKit entitlement claim in the original audit and in §1a's C1 finding was **corrected**: it was based on third-party blog posts, not Apple's own documentation, which describes AlarmKit setup as requiring only `NSAlarmKitUsageDescription` + `requestAuthorization()` with no entitlement mentioned anywhere. Whether an entitlement is needed at all is now honestly unresolved rather than asserted as a known blocker with a defined (but unconfirmed) resolution path — see `IOS_ALARMKIT_ENTITLEMENT.md`. None of the requested Mac-side work (Xcode 26 compile, Archive, physical-device matrix, TestFlight) could be executed from this Windows environment; `tool/ios_mac_validation.sh` is updated and ready for whenever a Mac is available, but has not been run.
+
+**2026-07-25, later still (§1c, real Mac):** A rented Mac with Xcode 26 was used to close the biggest remaining unknown — whether any of this actually compiles against the real SDK. It does: Debug, Profile, and Release all build successfully, after two real (not hypothetical) issues surfaced and were fixed — a missing CocoaPods `xcconfig` include, and an AlarmKit API call that only exists on iOS 26.1+ being used on an iOS-26.0 floor. The release packaging gate from §1b was proven on real Xcode to both correctly block a build missing `PRIVACY_POLICY_URL`/`SUPPORT_EMAIL` and correctly allow one that has them. **This is still not a release clearance** — no code signing, no Archive, no physical device, no AlarmKit authorization/lock-screen/Answer/Dismiss behavior has been exercised. `IPHONEOS_DEPLOYMENT_TARGET` had to be raised from 12.0 to 13.0 for CocoaPods to resolve at all (current Flutter/plugin versions require ≥13.0); the user explicitly approved making this permanent, and it is now committed to `project.pbxproj` / `AppFrameworkInfo.plist`, superseding the original "do not touch deployment targets" restriction for this one setting. **Ship iOS only after Archive + codesign + the physical destruction matrix in §11 pass with recorded firing logs on a real iOS 26+ device** — that gate is unchanged and is the only thing left between here and a release claim.
