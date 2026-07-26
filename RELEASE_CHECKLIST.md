@@ -5,29 +5,44 @@ build or the store review until resolved.
 
 ---
 
-## 1. Production configuration (BLOCKER — enforced at build time)
+## 1. Production configuration (BLOCKER — enforced at build time, on both platforms, automatically)
 
-Validation happens **before packaging**, in two layers:
+Validation happens **before packaging on both platforms, automatically —
+this is not a manual step that can be skipped or forgotten**:
 
-1. **Android (automatic)**: `android/app/build.gradle.kts` decodes the
-   `--dart-define` values and fails any `*Release`/`*Bundle` Gradle task at
-   configuration time if `PRIVACY_POLICY_URL` or `SUPPORT_EMAIL` is missing
-   or invalid, or if the applicationId is a `com.example` placeholder.
-2. **iOS / CI (run manually or in the pipeline)**: Xcode has no dart-define
-   hook, so run the gate script before `flutter build ipa`:
-
-   ```
-   dart run tool/check_release_config.dart
-   ```
-
-   It reads `PRIVACY_POLICY_URL` / `SUPPORT_EMAIL` from environment
-   variables (or `--privacy-policy-url=... --support-email=...` args) and
-   exits non-zero when invalid. CI must treat a non-zero exit as a failed
-   build.
+1. **Android**: `android/app/build.gradle.kts` decodes the `--dart-define`
+   values and fails any `*Release`/`*Bundle` Gradle task at configuration
+   time if `PRIVACY_POLICY_URL` or `SUPPORT_EMAIL` is missing or invalid, or
+   if the applicationId is a `com.example` placeholder. **Verified
+   2026-07-25**: a `flutter build appbundle --release` with no dart-defines
+   fails immediately with `RELEASE CONFIGURATION INVALID`; with a valid
+   `PRIVACY_POLICY_URL`/`SUPPORT_EMAIL` and the real upload keystore
+   configured, it builds and signs a genuine release `.aab` (confirmed with
+   `jarsigner -verify`).
+2. **iOS**: Xcode has no built-in dart-define hook, so a Run Script build
+   phase named **"Check Release Configuration"** was added to the Runner
+   target (`ios/Runner.xcodeproj/project.pbxproj`, script body in
+   `ios/Runner/check_release_config.sh`) — it is the **first** build phase,
+   runs on every `xcodebuild` invocation (`flutter build ios`,
+   `flutter build ipa`, Xcode's own Build/Run, and Archive all go through
+   `xcodebuild`), decodes Flutter's `DART_DEFINES` build setting, and fails
+   the build with a real Xcode build error if `PRIVACY_POLICY_URL` /
+   `SUPPORT_EMAIL` are missing or invalid **on Release configuration only**
+   (Debug/Profile are never blocked, matching the Android gate). This has
+   been logic-tested with Git Bash on Windows (missing / placeholder /
+   valid / mixed-defines cases) but the pbxproj edit itself has **not** been
+   opened in Xcode yet — verify on first Mac open that the "Check Release
+   Configuration" phase appears under Runner → Build Phases with no errors.
+3. **CI**, if/when configured, should additionally run
+   `dart run tool/check_release_config.dart` (reads env vars or
+   `--privacy-policy-url=... --support-email=...` args, exits non-zero when
+   invalid) as an early, fast-fail step before invoking either platform's
+   build — this is a convenience/fail-fast layer on top of #1/#2, not a
+   replacement for them.
 
 The in-app startup check (`lib/config/app_config.dart`) remains only as a
-secondary safeguard; debug builds show a visible dev warning instead of
-failing.
+tertiary safeguard for any build that somehow slipped past both of the
+above; debug builds show a visible dev warning instead of failing.
 
 ### Exact production build commands
 
@@ -118,6 +133,18 @@ iOS until every item in `IOS_REAL_DEVICE_TESTING.md` passes.
   - [ ] **Time Sensitive Notifications** capability shown (backed by
         `ios/Runner/Runner.entitlements`)
   - [ ] Provisioning profile supports the capability (no signing warnings)
+  - [ ] **AlarmKit** — no entitlement has been added, because it is not
+        actually confirmed that one is required (Apple's own AlarmKit docs
+        describe setup as only `NSAlarmKitUsageDescription` +
+        `requestAuthorization()` — see `IOS_ALARMKIT_ENTITLEMENT.md` for the
+        full evidence review). On first Mac build: run the app on a real
+        iOS 26+ device and check whether authorization/scheduling actually
+        works. Only if it fails with `error 1`, check Xcode's **+ Capability**
+        list for an "AlarmKit" entry — if present, follow Xcode's own
+        guidance (it writes the entitlement key itself); if absent, the
+        error has a different cause. Do not hand-add a guessed entitlement
+        key. The app already runs correctly on every iOS
+        version via the local-notification fallback without this.
 - [ ] App Store provisioning profile / automatic signing for Release
 - [ ] `flutter build ipa` succeeds
 - [ ] TestFlight build uploaded and installed on a physical iPhone

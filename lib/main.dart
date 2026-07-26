@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +10,10 @@ import 'models/salah_prayer.dart';
 import 'repositories/prayer_settings_repository.dart';
 import 'screens/home_screen.dart';
 import 'screens/incoming_salah_screen.dart';
+import 'services/diagnostics_log.dart';
 import 'services/geocoding_service.dart';
+import 'services/ios_alarmkit_service.dart';
+import 'services/ios_hybrid_notification_scheduler.dart';
 import 'services/local_notification_service.dart';
 import 'services/location_service.dart';
 import 'services/prayer_scheduler_service.dart';
@@ -23,23 +29,51 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   TimezoneService.ensureInitialized();
 
-  // Fails release builds without a configured privacy policy URL; logs a
-  // warning in debug builds.
-  AppConfig.validateForRelease();
+  // Never throws/crashes (see AppConfig docs): logs a warning if the
+  // privacy policy URL is missing or invalid, which should already have
+  // been caught before packaging by tool/check_release_config.dart.
+  final hasValidPrivacyPolicyUrl = AppConfig.validateForRelease();
 
   final repository = await PrayerSettingsRepository.create();
+  if (!hasValidPrivacyPolicyUrl) {
+    // Best-effort: now that SharedPreferences is available, also surface
+    // this in the in-app diagnostics log (visible from Settings), not just
+    // the console. Never blocks or fails startup.
+    unawaited(
+      DiagnosticsLog.recordError(
+        repository.prefs,
+        'config',
+        'PRIVACY_POLICY_URL is missing or invalid at runtime',
+      ),
+    );
+  }
   final prayerTimeService = PrayerTimeService();
   final notificationService = LocalNotificationService();
   final timezoneService = TimezoneService();
+
+  // iOS 26+: primary prayer alerts go through AlarmKit when authorized;
+  // Android and older iOS keep the existing local-notification path.
+  final IosAlarmKitService? alarmKitService =
+      (!kIsWeb && Platform.isIOS) ? IosAlarmKitService() : null;
+  final NotificationScheduler notificationScheduler =
+      alarmKitService != null
+          ? IosHybridNotificationScheduler(
+            notifications: notificationService,
+            alarmKit: alarmKitService,
+          )
+          : notificationService;
+
   final controller = AppController(
     repository: repository,
     prayerTimeService: prayerTimeService,
     locationService: LocationService(),
     timezoneService: timezoneService,
     notificationService: notificationService,
+    notificationScheduler: notificationScheduler,
+    alarmKitService: alarmKitService,
     schedulerService: PrayerSchedulerService(
       prayerTimeService: prayerTimeService,
-      notificationScheduler: notificationService,
+      notificationScheduler: notificationScheduler,
       repository: repository,
     ),
     geocodingService: GeocodingService(
@@ -56,14 +90,22 @@ Future<void> main() async {
   // on the simultaneously delivered notification). Only one may be shown.
   var incomingScreenOpen = false;
 
-  Future<void> presentIncomingScreen(SalahPrayer prayer) async {
+  Future<void> presentIncomingScreen(
+    SalahPrayer prayer, {
+    DateTime? scheduledAt,
+    String? alarmId,
+  }) async {
     if (incomingScreenOpen) return;
     incomingScreenOpen = true;
     try {
-      final result =
-          await navigatorKey.currentState?.push<IncomingSalahResult>(
+      final result = await navigatorKey.currentState?.push<IncomingSalahResult>(
         MaterialPageRoute(
-          builder: (_) => IncomingSalahScreen(prayer: prayer),
+          builder:
+              (_) => IncomingSalahScreen(
+                prayer: prayer,
+                scheduledAt: scheduledAt,
+                alarmId: alarmId,
+              ),
           fullscreenDialog: true,
         ),
       );
@@ -87,6 +129,15 @@ Future<void> main() async {
     }
   }
 
+  Future<void> presentFromAlarmKit(AlarmKitAnswer answer) async {
+    await alarmKitService?.clearPendingAnswer();
+    await presentIncomingScreen(
+      answer.prayer,
+      scheduledAt: answer.scheduledAt,
+      alarmId: answer.alarmId,
+    );
+  }
+
   controller.onOpenReminder = (payload, actionId) async {
     final prayer = payload.prayer ?? SalahPrayer.dhuhr;
 
@@ -94,7 +145,7 @@ Future<void> main() async {
     // already triggered the reschedule it asked for.
     if (payload.type == SalahNotificationPayload.typeRefresh) return;
 
-    // "Pray Now" on the notification shade.
+    // "Pray Now" / iOS "Answer" on the notification shade.
     //
     // iOS: open the full call UI (same as tapping the notification body).
     // Apple cannot auto-present that screen when the app is backgrounded or
@@ -123,17 +174,35 @@ Future<void> main() async {
   // present the full call screen directly — no notification tap needed.
   // This is the closest-to-a-real-call experience iOS permits; on Android
   // it complements the lock-screen full-screen intent.
-  controller.onPrayerEntered = presentIncomingScreen;
+  controller.onPrayerEntered = (prayer) => presentIncomingScreen(prayer);
+
+  // AlarmKit Answer: foreground / background while Flutter is alive.
+  if (alarmKitService != null) {
+    alarmKitService.ensureListening();
+    alarmKitService.onAnswered.listen(presentFromAlarmKit);
+    controller.onAlarmKitAnswer = presentFromAlarmKit;
+  }
 
   runApp(SalahApp(controller: controller));
 
   // Initialize after runApp so the first frame is not blocked on
   // permission dialogs and location lookups.
-  controller.initialize().catchError((Object e, StackTrace st) {
-    // Errors here are non-fatal but must not be silently swallowed; the app
-    // will still render and the user can retry via Settings → Recalculate.
-    debugPrint('AppController.initialize failed: $e\n$st');
-  });
+  controller
+      .initialize()
+      .then((_) async {
+        // Terminated → Answer: consume any pending AlarmKit payload after init.
+        final pending = await alarmKitService?.getPendingAnswer();
+        if (pending != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            presentFromAlarmKit(pending);
+          });
+        }
+      })
+      .catchError((Object e, StackTrace st) {
+        // Errors here are non-fatal but must not be silently swallowed; the app
+        // will still render and the user can retry via Settings → Recalculate.
+        debugPrint('AppController.initialize failed: $e\n$st');
+      });
 }
 
 class SalahApp extends StatelessWidget {

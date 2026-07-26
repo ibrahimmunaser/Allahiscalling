@@ -54,8 +54,11 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
   Future<void> _loadNearby() async {
     final settings = context.read<AppController>().settings;
     if (!settings.hasLocation) return;
-    final nearby = await CityDatabase.instance
-        .nearby(settings.latitude!, settings.longitude!, limit: 12);
+    final nearby = await CityDatabase.instance.nearby(
+      settings.latitude!,
+      settings.longitude!,
+      limit: 12,
+    );
     if (!mounted) return;
     setState(() => _nearby = nearby);
   }
@@ -106,10 +109,13 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
       if (results.isNotEmpty) _results = results;
     });
     if (results.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            'No matches found online either. Check the spelling, or enter coordinates manually.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No matches found online either. Check the spelling, or enter coordinates manually.',
+          ),
+        ),
+      );
     }
   }
 
@@ -125,10 +131,13 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
     final lat = double.tryParse(_latController.text.trim());
     final lng = double.tryParse(_lngController.text.trim());
     if (lat == null || lng == null || lat.abs() > 90 || lng.abs() > 180) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text(
-            'Please enter a valid latitude (-90 to 90) and longitude (-180 to 180).'),
-      ));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please enter a valid latitude (-90 to 90) and longitude (-180 to 180).',
+          ),
+        ),
+      );
       return;
     }
 
@@ -136,10 +145,13 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
     final tzInput = _tzController.text.trim();
     if (tzInput.isNotEmpty) {
       if (!TimezoneService().isValidTimezone(tzInput)) {
-        messenger.showSnackBar(const SnackBar(
-          content: Text(
-              'Unknown timezone. Use an IANA name like "America/New_York", or leave it blank to detect it from the coordinates.'),
-        ));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Unknown timezone. Use an IANA name like "America/New_York", or leave it blank to detect it from the coordinates.',
+            ),
+          ),
+        );
         return;
       }
       timezone = tzInput;
@@ -163,18 +175,10 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
             indicatorColor: Colors.amber,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
-            tabs: [
-              Tab(text: 'Search City'),
-              Tab(text: 'Coordinates'),
-            ],
+            tabs: [Tab(text: 'Search City'), Tab(text: 'Coordinates')],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildCityTab(),
-            _buildCoordinatesTab(),
-          ],
-        ),
+        body: TabBarView(children: [_buildCityTab(), _buildCoordinatesTab()]),
       ),
     );
   }
@@ -194,15 +198,16 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
               helperText:
                   'Try "Springfield, Illinois" or "Detroit USA". Works offline.',
               border: const OutlineInputBorder(),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        _onQueryChanged('');
-                      },
-                    )
-                  : null,
+              suffixIcon:
+                  _query.isNotEmpty
+                      ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onQueryChanged('');
+                        },
+                      )
+                      : null,
             ),
             onChanged: _onQueryChanged,
           ),
@@ -279,13 +284,14 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
               if (!_searchedOnline)
                 FilledButton.icon(
                   onPressed: _onlineSearching ? null : _searchOnline,
-                  icon: _onlineSearching
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.cloud_outlined),
+                  icon:
+                      _onlineSearching
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.cloud_outlined),
                   label: const Text('Search online'),
                 ),
             ],
@@ -308,16 +314,19 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
     return ListTile(
       leading: const Icon(Icons.location_city_outlined),
       title: Text(city.name),
-      subtitle: Text([
-        if (details.isNotEmpty) details,
-        if (city.timezone.isNotEmpty) city.timezone,
-      ].join(' · ')),
-      trailing: city.population > 0
-          ? Text(
-              _formatPopulation(city.population),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            )
-          : null,
+      subtitle: Text(
+        [
+          if (details.isNotEmpty) details,
+          if (city.timezone.isNotEmpty) city.timezone,
+        ].join(' · '),
+      ),
+      trailing:
+          city.population > 0
+              ? Text(
+                _formatPopulation(city.population),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              )
+              : null,
       onTap: () => _selectCity(city),
     );
   }
@@ -339,7 +348,9 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
         TextField(
           controller: _latController,
           keyboardType: const TextInputType.numberWithOptions(
-              decimal: true, signed: true),
+            decimal: true,
+            signed: true,
+          ),
           decoration: const InputDecoration(
             labelText: 'Latitude',
             hintText: 'e.g. 40.7128',
@@ -350,7 +361,9 @@ class _ManualLocationScreenState extends State<ManualLocationScreen> {
         TextField(
           controller: _lngController,
           keyboardType: const TextInputType.numberWithOptions(
-              decimal: true, signed: true),
+            decimal: true,
+            signed: true,
+          ),
           decoration: const InputDecoration(
             labelText: 'Longitude',
             hintText: 'e.g. -74.0060',

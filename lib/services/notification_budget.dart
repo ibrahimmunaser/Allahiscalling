@@ -54,8 +54,9 @@ AdmissionPlan planAdmission({
   required ScheduledReminder candidate,
   required int? maxPending,
 }) {
-  final existingIndex =
-      reconciled.indexWhere((r) => r.notificationId == candidate.notificationId);
+  final existingIndex = reconciled.indexWhere(
+    (r) => r.notificationId == candidate.notificationId,
+  );
   if (existingIndex != -1) {
     final updated = [...reconciled];
     updated[existingIndex] = candidate;
@@ -82,8 +83,9 @@ AdmissionPlan planAdmission({
 
   void evictFrom(ReminderKind kind) {
     if (overflow <= 0) return;
-    final candidates = remaining.where((r) => r.kind == kind).toList()
-      ..sort((a, b) => b.scheduledAtMillis.compareTo(a.scheduledAtMillis));
+    final candidates =
+        remaining.where((r) => r.kind == kind).toList()
+          ..sort((a, b) => b.scheduledAtMillis.compareTo(a.scheduledAtMillis));
     for (final r in candidates) {
       if (overflow <= 0) break;
       toEvict.add(r.notificationId);
@@ -242,8 +244,11 @@ class NotificationBudgetCoordinator {
     try {
       return (await notificationScheduler.pendingIds()).toSet();
     } catch (e) {
-      await DiagnosticsLog.recordError(repository.prefs, 'scheduling',
-          'pendingIds query failed during admission: $e');
+      await DiagnosticsLog.recordError(
+        repository.prefs,
+        'scheduling',
+        'pendingIds query failed during admission: $e',
+      );
       return null;
     }
   }
@@ -268,8 +273,9 @@ class NotificationBudgetCoordinator {
     required ScheduledReminder candidate,
     required Future<void> Function() schedule,
   }) async {
-    final existingIndex = persisted
-        .indexWhere((r) => r.notificationId == candidate.notificationId);
+    final existingIndex = persisted.indexWhere(
+      (r) => r.notificationId == candidate.notificationId,
+    );
     final isReplacement = existingIndex != -1;
 
     if (!isReplacement &&
@@ -291,12 +297,13 @@ class NotificationBudgetCoordinator {
     }
 
     await schedule();
-    final updated = isReplacement
-        ? [
-            for (var i = 0; i < persisted.length; i++)
-              i == existingIndex ? candidate : persisted[i],
-          ]
-        : [...persisted, candidate];
+    final updated =
+        isReplacement
+            ? [
+              for (var i = 0; i < persisted.length; i++)
+                i == existingIndex ? candidate : persisted[i],
+            ]
+            : [...persisted, candidate];
     await repository.saveScheduledReminders(updated);
     return true;
   }

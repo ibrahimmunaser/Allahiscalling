@@ -19,6 +19,7 @@ import '../services/diagnostics_log.dart';
 import '../services/geocoding_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/location_service.dart';
+import '../services/ios_alarmkit_service.dart';
 import '../services/prayer_scheduler_service.dart';
 import '../services/prayer_time_service.dart';
 import '../services/timezone_service.dart';
@@ -33,14 +34,30 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   final LocationService locationService;
   final TimezoneService timezoneService;
   final LocalNotificationService notificationService;
+
+  /// The same [NotificationScheduler] passed to [schedulerService] (the
+  /// hybrid AlarmKit/local scheduler on iOS 26+, or [notificationService]
+  /// itself elsewhere). Cancellation of a primary reminder MUST go through
+  /// this rather than [notificationService] directly — a primary occurrence
+  /// may be backed by an AlarmKit alarm, which [notificationService] alone
+  /// cannot cancel. Defaults to [notificationService] so existing callers
+  /// (and every non-iOS platform) are unaffected.
+  final NotificationScheduler notificationScheduler;
   final PrayerSchedulerService schedulerService;
   final GeocodingService geocodingService;
+
+  /// iOS 26+ AlarmKit bridge. Null on Android / when unused.
+  final IosAlarmKitService? alarmKitService;
 
   /// Set by the app shell so notification taps can navigate.
   /// [actionId] is the notification action that was tapped (e.g. "Pray Now"),
   /// or null for a plain body tap.
   void Function(SalahNotificationPayload payload, String? actionId)?
-      onOpenReminder;
+  onOpenReminder;
+
+  /// Set by the app shell when AlarmKit Answer delivers a pending payload
+  /// (cold start / resume).
+  void Function(AlarmKitAnswer answer)? onAlarmKitAnswer;
 
   /// Set by the app shell: called when a prayer enters while the app is in
   /// the foreground, so the incoming call screen can be presented with zero
@@ -58,6 +75,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   LocationResultStatus? _lastLocationStatus;
   bool _notificationsPermitted = false;
   bool _exactAlarmsAvailable = true;
+  bool _alarmKitAvailable = false;
+  String _alarmKitAuthStatus = 'unavailable';
 
   /// Memoized next prayer so the per-second countdown never triggers a full
   /// astronomical recalculation. Invalidated when the cached prayer's time
@@ -79,7 +98,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     required this.notificationService,
     required this.schedulerService,
     required this.geocodingService,
-  });
+    NotificationScheduler? notificationScheduler,
+    this.alarmKitService,
+  }) : notificationScheduler = notificationScheduler ?? notificationService;
 
   PrayerSettings get settings => _settings;
   PrayerDayTimes? get today => _today;
@@ -88,6 +109,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   String? get statusMessage => _statusMessage;
   LocationResultStatus? get lastLocationStatus => _lastLocationStatus;
   bool get notificationsPermitted => _notificationsPermitted;
+
+  /// Whether AlarmKit is present on this device (iOS 26+ SDK / runtime).
+  bool get alarmKitAvailable => _alarmKitAvailable;
+
+  /// `authorized` | `denied` | `notDetermined` | `unavailable`
+  String get alarmKitAuthStatus => _alarmKitAuthStatus;
+
+  bool get alarmKitAuthorized => _alarmKitAuthStatus == 'authorized';
 
   /// Whether Android exact alarms are available. When false, reminders use
   /// inexact scheduling and may be delayed by the OS — surfaced honestly in
@@ -145,6 +174,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _notificationsPermitted = await notificationService.requestPermissions();
     _exactAlarmsAvailable = await notificationService.canScheduleExactAlarms();
 
+    final alarmKit = alarmKitService;
+    if (alarmKit != null) {
+      alarmKit.ensureListening();
+      _alarmKitAvailable = await alarmKit.isAvailable();
+      _alarmKitAuthStatus = await alarmKit.authorizationStatus();
+    }
+
     // Detect timezone (handles first run and timezone changes while closed).
     final detectedTimezone = await timezoneService.detectTimezone();
     final isFirstRun = _settings.timezone == null;
@@ -153,8 +189,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       _settings = _settings.copyWith(timezone: detectedTimezone);
       if (isFirstRun) {
         _settings = _settings.copyWith(
-          calculationMethod:
-              PrayerSettings.suggestMethodForTimezone(detectedTimezone),
+          calculationMethod: PrayerSettings.suggestMethodForTimezone(
+            detectedTimezone,
+          ),
         );
       }
       await repository.saveSettings(_settings);
@@ -221,12 +258,16 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final result = await locationService.getCurrentLocationIfPermitted();
       if (result.isSuccess &&
           schedulerService.hasLocationChangedSignificantly(
-              result.latitude!, result.longitude!)) {
+            result.latitude!,
+            result.longitude!,
+          )) {
         _settings = _settings.copyWith(
           latitude: result.latitude,
           longitude: result.longitude,
           locationLabel: await _labelForCoordinates(
-              result.latitude!, result.longitude!),
+            result.latitude!,
+            result.longitude!,
+          ),
         );
         await repository.saveSettings(_settings);
         needsReschedule = true;
@@ -235,6 +276,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
     if (needsReschedule) {
       await recalculateAndReschedule();
+    }
+    await refreshAlarmKitAuthorization();
+    final pendingAnswer = await alarmKitService?.getPendingAnswer();
+    if (pendingAnswer != null) {
+      onAlarmKitAnswer?.call(pendingAnswer);
     }
     _scheduleMidnightRecalculation();
     _schedulePrayerWatch();
@@ -263,7 +309,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _prayerWatchTimer?.cancel();
     final next = nextPrayer;
     if (next == null) return;
-    final delay = next.value.difference(nowInUserZone()) +
+    final delay =
+        next.value.difference(nowInUserZone()) +
         // Slightly after the minute so the OS notification (exact alarm) and
         // persisted bookkeeping agree the prayer has entered.
         const Duration(seconds: 2);
@@ -293,7 +340,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           r.prayer == prayer &&
           r.scheduledAtMillis <= nowMillis &&
           nowMillis - r.scheduledAtMillis < Duration.millisecondsPerDay) {
-        await notificationService.cancel(r.notificationId);
+        // Goes through the hybrid scheduler (not notificationService
+        // directly): on iOS 26+ this occurrence may be an AlarmKit alarm,
+        // not a local notification, and only the hybrid scheduler knows
+        // which — and can cancel — the right one.
+        await notificationScheduler.cancel(r.notificationId);
       }
     }
   }
@@ -313,8 +364,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _cachedNextPrayer = null;
     if (_settings.hasLocation && _settings.timezone != null) {
       try {
-        _today = prayerTimeService.calculateForDate(
-            _settings, nowInUserZone());
+        _today = prayerTimeService.calculateForDate(_settings, nowInUserZone());
         _statusMessage = null;
       } catch (e) {
         _today = null;
@@ -326,7 +376,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         debugPrint('Scheduling failed: $e');
         // Surface in the beta diagnostics report (no user data in entry).
         await DiagnosticsLog.recordError(
-            repository.prefs, 'scheduling', 'rescheduleAll failed: $e');
+          repository.prefs,
+          'scheduling',
+          'rescheduleAll failed: $e',
+        );
       }
       _nextReminder = schedulerService.nextScheduledReminder();
     } else {
@@ -347,11 +400,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return status;
   }
 
-  Future<LocationResultStatus> _refreshDeviceLocation(
-      {required bool silent, required bool mayPrompt}) async {
-    final result = mayPrompt
-        ? await locationService.getCurrentLocation()
-        : await locationService.getCurrentLocationIfPermitted();
+  Future<LocationResultStatus> _refreshDeviceLocation({
+    required bool silent,
+    required bool mayPrompt,
+  }) async {
+    final result =
+        mayPrompt
+            ? await locationService.getCurrentLocation()
+            : await locationService.getCurrentLocationIfPermitted();
     _lastLocationStatus = result.status;
     if (result.isSuccess) {
       // GPS is the top priority source. The device timezone is authoritative
@@ -361,7 +417,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         latitude: result.latitude,
         longitude: result.longitude,
         locationLabel: await _labelForCoordinates(
-            result.latitude!, result.longitude!),
+          result.latitude!,
+          result.longitude!,
+        ),
         locationSource: LocationSource.device,
         timezone: detectedTimezone,
       );
@@ -376,10 +434,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// coordinates themselves. Prayer times are always computed from lat/lng.
   Future<void> setCityLocation(City city) async {
     final timezone =
-        city.timezone.isNotEmpty && timezoneService.isValidTimezone(city.timezone)
+        city.timezone.isNotEmpty &&
+                timezoneService.isValidTimezone(city.timezone)
             ? city.timezone
             : timezoneService.timezoneForCoordinates(
-                city.latitude, city.longitude);
+              city.latitude,
+              city.longitude,
+            );
     _settings = _settings.copyWith(
       latitude: city.latitude,
       longitude: city.longitude,
@@ -392,9 +453,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setManualCoordinates(
-      double latitude, double longitude, String? timezone) async {
-    final resolved = timezone ??
-        timezoneService.timezoneForCoordinates(latitude, longitude);
+    double latitude,
+    double longitude,
+    String? timezone,
+  ) async {
+    final resolved =
+        timezone ?? timezoneService.timezoneForCoordinates(latitude, longitude);
     _settings = _settings.copyWith(
       latitude: latitude,
       longitude: longitude,
@@ -444,6 +508,50 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Requests AlarmKit authorization from a clear user action. Does not
+  /// re-prompt after denial — use [openAlarmKitSettings] instead.
+  Future<String> requestAlarmKitPermission() async {
+    final alarmKit = alarmKitService;
+    if (alarmKit == null) return 'unavailable';
+    final current = await alarmKit.authorizationStatus();
+    if (current == 'denied') {
+      _alarmKitAuthStatus = current;
+      notifyListeners();
+      return current;
+    }
+    _alarmKitAuthStatus = await alarmKit.requestAuthorization();
+    notifyListeners();
+    if (_alarmKitAuthStatus == 'authorized') {
+      await recalculateAndReschedule();
+    }
+    return _alarmKitAuthStatus;
+  }
+
+  Future<void> refreshAlarmKitAuthorization() async {
+    final alarmKit = alarmKitService;
+    if (alarmKit == null) return;
+    _alarmKitAvailable = await alarmKit.isAvailable();
+    _alarmKitAuthStatus = await alarmKit.authorizationStatus();
+    notifyListeners();
+  }
+
+  Future<void> openAlarmKitSettings() async {
+    await alarmKitService?.openSystemSettings();
+  }
+
+  /// Debug-only: schedule an AlarmKit prayer alert ~1 minute ahead.
+  Future<bool> scheduleAlarmKitDebugInOneMinute() async {
+    final alarmKit = alarmKitService;
+    if (alarmKit == null || !_alarmKitAvailable) return false;
+    if (_alarmKitAuthStatus != 'authorized') {
+      final status = await requestAlarmKitPermission();
+      if (status != 'authorized') return false;
+    }
+    final prayer = nextPrayer?.key ?? SalahPrayer.dhuhr;
+    await alarmKit.scheduleDebugAlarm(prayer: prayer);
+    return true;
+  }
+
   Future<void> sendTestNotification() =>
       notificationService.showTestNotification();
 
@@ -454,10 +562,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// action uses, so foreground and background Decline cannot drift apart.
   Future<void> snooze(SalahPrayer prayer) async {
     await repository.savePrayerResponse(
-        nowInUserZone(), prayer, PrayerResponseState.declined, DateTime.now());
+      nowInUserZone(),
+      prayer,
+      PrayerResponseState.declined,
+      DateTime.now(),
+    );
     await performDecline(
       prefs: repository.prefs,
       notificationService: notificationService,
+      notificationScheduler: notificationScheduler,
       prayer: prayer,
     );
     // If this Decline came from the auto-presented (foreground) call screen,
@@ -474,8 +587,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// the dismissal (backing out of the full-screen reminder); shade
   /// swipe-aways provide no reliable callback and are never inferred.
   Future<void> markPrayerDismissed(SalahPrayer prayer) async {
-    await repository.savePrayerResponse(nowInUserZone(), prayer,
-        PrayerResponseState.dismissed, DateTime.now());
+    await repository.savePrayerResponse(
+      nowInUserZone(),
+      prayer,
+      PrayerResponseState.dismissed,
+      DateTime.now(),
+    );
     notifyListeners();
   }
 
@@ -486,7 +603,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// they did answer. Completion is confirmed later, never immediately.
   Future<void> markPrayerAnswered(SalahPrayer prayer) async {
     await repository.savePrayerResponse(
-        nowInUserZone(), prayer, PrayerResponseState.answered, DateTime.now());
+      nowInUserZone(),
+      prayer,
+      PrayerResponseState.answered,
+      DateTime.now(),
+    );
     await cancelCurrentFollowUp(prayer);
     // Remove the delivered notification if the answer came from the
     // auto-presented (foreground) call screen; no-op otherwise.
@@ -543,14 +664,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// (i.e. the prayer already entered but its follow-up has not fired yet).
   /// Follow-ups for future days remain scheduled.
   Future<void> cancelCurrentFollowUp(SalahPrayer prayer) async {
-    final followUpMillis =
-        PrayerSchedulerService.followUpDelay.inMilliseconds;
+    final followUpMillis = PrayerSchedulerService.followUpDelay.inMilliseconds;
     final reminders = repository.loadScheduledReminders();
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     final remaining = <ScheduledReminder>[];
     var changed = false;
     for (final r in reminders) {
-      final isCurrentWindowFollowUp = r.kind == ReminderKind.followUp &&
+      final isCurrentWindowFollowUp =
+          r.kind == ReminderKind.followUp &&
           r.prayer == prayer &&
           r.scheduledAtMillis > nowMillis &&
           r.scheduledAtMillis - followUpMillis <= nowMillis;
@@ -580,7 +701,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     int snoozes,
     DateTime? lastPrimaryAt,
     double daysOfCoverage,
-  }) get schedulingStats {
+  })
+  get schedulingStats {
     final reminders = repository.loadScheduledReminders();
     var primary = 0, followUps = 0, snoozes = 0;
     DateTime? lastPrimaryAt;
@@ -599,9 +721,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           break;
       }
     }
-    final coverage = lastPrimaryAt == null
-        ? 0.0
-        : lastPrimaryAt.difference(DateTime.now()).inMinutes / (60 * 24);
+    final coverage =
+        lastPrimaryAt == null
+            ? 0.0
+            : lastPrimaryAt.difference(DateTime.now()).inMinutes / (60 * 24);
     return (
       primary: primary,
       followUps: followUps,
@@ -634,8 +757,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// User accepted the guidance: mark shown and route to system settings.
   Future<void> acceptFullScreenGuidance() async {
-    await repository
-        .setFlag(PrayerSettingsRepository.fullScreenGuidanceFlag);
+    await repository.setFlag(PrayerSettingsRepository.fullScreenGuidanceFlag);
     await notificationService.requestFullScreenIntent();
   }
 

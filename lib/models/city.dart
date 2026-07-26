@@ -36,25 +36,25 @@ class City {
   String get shortLabel => region.isNotEmpty ? '$name, $region' : name;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'alternateNames': alternateNames,
-        'country': country,
-        'region': region,
-        'latitude': latitude,
-        'longitude': longitude,
-        'timezone': timezone,
-        'population': population,
-      };
+    'name': name,
+    'alternateNames': alternateNames,
+    'country': country,
+    'region': region,
+    'latitude': latitude,
+    'longitude': longitude,
+    'timezone': timezone,
+    'population': population,
+  };
 
   factory City.fromJson(Map<String, dynamic> json) => City(
-        name: json['name'] as String,
-        alternateNames: (json['alternateNames'] as List<dynamic>? ?? const [])
-            .cast<String>(),
-        country: json['country'] as String? ?? '',
-        region: json['region'] as String? ?? '',
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        timezone: json['timezone'] as String? ?? '',
-        population: json['population'] as int? ?? 0,
-      );
+    name: json['name'] as String,
+    alternateNames:
+        (json['alternateNames'] as List<dynamic>? ?? const []).cast<String>(),
+    country: json['country'] as String? ?? '',
+    region: json['region'] as String? ?? '',
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    timezone: json['timezone'] as String? ?? '',
+    population: json['population'] as int? ?? 0,
+  );
 }

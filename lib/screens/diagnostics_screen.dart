@@ -53,15 +53,19 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     try {
       if (!kIsWeb && Platform.isAndroid) {
         final android = await DeviceInfoPlugin().androidInfo;
-        lines.add('OS: Android ${android.version.release} '
-            '(SDK ${android.version.sdkInt})');
+        lines.add(
+          'OS: Android ${android.version.release} '
+          '(SDK ${android.version.sdkInt})',
+        );
         lines.add('Device: ${android.manufacturer} ${android.model}');
-        lines.add(android.version.sdkInt >= 34
-            ? 'Full-screen intent: special access required on this Android '
-                'version — state not queryable in-app; verify under '
-                'Settings > Apps > Special app access.'
-            : 'Full-screen intent: granted at install on this Android '
-                'version.');
+        lines.add(
+          android.version.sdkInt >= 34
+              ? 'Full-screen intent: special access required on this Android '
+                  'version — state not queryable in-app; verify under '
+                  'Settings > Apps > Special app access.'
+              : 'Full-screen intent: granted at install on this Android '
+                  'version.',
+        );
       } else if (!kIsWeb && Platform.isIOS) {
         final ios = await DeviceInfoPlugin().iosInfo;
         lines.add('OS: iOS ${ios.systemVersion}');
@@ -75,11 +79,15 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     // Configuration (no coordinates — privacy).
     final settings = controller.settings;
     lines.add('Timezone (selected): ${settings.timezone ?? "not set"}');
-    lines.add('Timezone (device): ${DateTime.now().timeZoneName} '
-        '(UTC${DateTime.now().timeZoneOffset.isNegative ? "" : "+"}'
-        '${DateTime.now().timeZoneOffset.inHours})');
-    lines.add('Location source: ${settings.locationSource.name} '
-        '(coordinates withheld from this report)');
+    lines.add(
+      'Timezone (device): ${DateTime.now().timeZoneName} '
+      '(UTC${DateTime.now().timeZoneOffset.isNegative ? "" : "+"}'
+      '${DateTime.now().timeZoneOffset.inHours})',
+    );
+    lines.add(
+      'Location source: ${settings.locationSource.name} '
+      '(coordinates withheld from this report)',
+    );
     lines.add('Calculation method: ${settings.calculationMethod.name}');
     lines.add('Asr method: ${settings.asrMethod.name}');
     lines.add('Notifications enabled: ${settings.notificationsEnabled}');
@@ -89,17 +97,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
     // Scheduling health.
     final stats = controller.schedulingStats;
-    lines.add('Last successful scheduling: '
-        '${controller.lastSchedulingTime?.toIso8601String() ?? "never"}');
-    lines.add('Next primary reminder: '
-        '${controller.nextReminder?.scheduledAt.toIso8601String() ?? "none"}');
-    lines.add('Last primary reminder: '
-        '${stats.lastPrimaryAt?.toIso8601String() ?? "none"}');
+    lines.add(
+      'Last successful scheduling: '
+      '${controller.lastSchedulingTime?.toIso8601String() ?? "never"}',
+    );
+    lines.add(
+      'Next primary reminder: '
+      '${controller.nextReminder?.scheduledAt.toIso8601String() ?? "none"}',
+    );
+    lines.add(
+      'Last primary reminder: '
+      '${stats.lastPrimaryAt?.toIso8601String() ?? "none"}',
+    );
     lines.add('Primary reminders: ${stats.primary}');
     lines.add('Follow-ups: ${stats.followUps}');
     lines.add('Snoozes: ${stats.snoozes}');
-    lines.add('Days of primary coverage: '
-        '${stats.daysOfCoverage.toStringAsFixed(1)}');
+    lines.add(
+      'Days of primary coverage: '
+      '${stats.daysOfCoverage.toStringAsFixed(1)}',
+    );
     try {
       final pending =
           await controller.notificationService.pendingNotifications();
@@ -120,8 +136,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       }
     }
     lines.add('');
-    lines.add('This report contains no location coordinates, no prayer '
-        'history, and no personal identifiers.');
+    lines.add(
+      'This report contains no location coordinates, no prayer '
+      'history, and no personal identifiers.',
+    );
 
     if (mounted) setState(() => _report = lines.join('\n'));
   }
@@ -150,37 +168,41 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ),
         ],
       ),
-      body: _report == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      'Share this report with the beta team when reporting '
-                      'missed, late, duplicate, or stopped reminders. It '
-                      'includes no location coordinates, prayer history, or '
-                      'personal identifiers.',
-                      style: Theme.of(context).textTheme.bodySmall,
+      body:
+          _report == null
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'Share this report with the beta team when reporting '
+                        'missed, late, duplicate, or stopped reminders. It '
+                        'includes no location coordinates, prayer history, or '
+                        'personal identifiers.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                SelectableText(
-                  _report!,
-                  style: const TextStyle(
-                      fontFamily: 'monospace', fontSize: 12.5, height: 1.45),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _copy,
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copy report'),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    _report!,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _copy,
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy report'),
+                  ),
+                ],
+              ),
     );
   }
 }

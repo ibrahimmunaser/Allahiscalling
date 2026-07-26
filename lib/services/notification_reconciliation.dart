@@ -50,9 +50,10 @@ ReconciliationResult reconcile({
   }
 
   final knownIds = persisted.map((r) => r.notificationId).toSet();
-  final orphans = actualPendingIds
-      .where((id) => !knownIds.contains(id) && !ignoredIds.contains(id))
-      .toList();
+  final orphans =
+      actualPendingIds
+          .where((id) => !knownIds.contains(id) && !ignoredIds.contains(id))
+          .toList();
 
   return ReconciliationResult(
     confirmed: confirmed,

@@ -15,54 +15,57 @@ class PrayerTimesList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: day.orderedEntries.map((entry) {
-        final isNext = entry.key == highlighted;
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: isNext
-                ? AppTheme.emerald.withValues(alpha: 0.10)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: isNext
-                ? Border.all(color: AppTheme.gold, width: 1.2)
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+      children:
+          day.orderedEntries.map((entry) {
+            final isNext = entry.key == highlighted;
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color:
+                    isNext
+                        ? AppTheme.emerald.withValues(alpha: 0.10)
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    isNext
+                        ? Border.all(color: AppTheme.gold, width: 1.2)
+                        : null,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    _iconFor(entry.key),
-                    size: 20,
-                    color: isNext ? AppTheme.emerald : Colors.grey.shade600,
+                  Row(
+                    children: [
+                      Icon(
+                        _iconFor(entry.key),
+                        size: 20,
+                        color: isNext ? AppTheme.emerald : Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        entry.key.displayName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight:
+                              isNext ? FontWeight.w700 : FontWeight.w500,
+                          color: isNext ? AppTheme.deepGreen : Colors.black87,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
                   Text(
-                    entry.key.displayName,
+                    formatTime(entry.value),
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          isNext ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
                       color: isNext ? AppTheme.deepGreen : Colors.black87,
                     ),
                   ),
                 ],
               ),
-              Text(
-                formatTime(entry.value),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
-                  color: isNext ? AppTheme.deepGreen : Colors.black87,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+            );
+          }).toList(),
     );
   }
 

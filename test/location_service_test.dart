@@ -3,17 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 
 Position _position(double lat, double lng) => Position(
-      latitude: lat,
-      longitude: lng,
-      timestamp: DateTime(2026, 7, 4),
-      accuracy: 10,
-      altitude: 0,
-      altitudeAccuracy: 0,
-      heading: 0,
-      headingAccuracy: 0,
-      speed: 0,
-      speedAccuracy: 0,
-    );
+  latitude: lat,
+  longitude: lng,
+  timestamp: DateTime(2026, 7, 4),
+  accuracy: 10,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
 
 void main() {
   group('passive path (lifecycle) never prompts', () {
@@ -33,8 +33,11 @@ void main() {
       final result = await service.getCurrentLocationIfPermitted();
 
       expect(result.status, LocationResultStatus.permissionDenied);
-      expect(promptShown, isFalse,
-          reason: 'lifecycle path must never launch a permission prompt');
+      expect(
+        promptShown,
+        isFalse,
+        reason: 'lifecycle path must never launch a permission prompt',
+      );
     });
 
     test('permanently denied: returns silently without requesting', () async {
@@ -111,24 +114,26 @@ void main() {
       expect(result.status, LocationResultStatus.permissionDenied);
     });
 
-    test('permanently denied: never re-prompts (OS would suppress anyway)',
-        () async {
-      var promptShown = false;
-      final service = LocationService(
-        isServiceEnabled: () async => true,
-        checkPermission: () async => LocationPermission.deniedForever,
-        requestPermission: () async {
-          promptShown = true;
-          return LocationPermission.deniedForever;
-        },
-        getPosition: () async => _position(0, 0),
-        getLastKnown: () async => null,
-      );
+    test(
+      'permanently denied: never re-prompts (OS would suppress anyway)',
+      () async {
+        var promptShown = false;
+        final service = LocationService(
+          isServiceEnabled: () async => true,
+          checkPermission: () async => LocationPermission.deniedForever,
+          requestPermission: () async {
+            promptShown = true;
+            return LocationPermission.deniedForever;
+          },
+          getPosition: () async => _position(0, 0),
+          getLastKnown: () async => null,
+        );
 
-      final result = await service.getCurrentLocation();
-      expect(result.status, LocationResultStatus.permissionDeniedForever);
-      expect(promptShown, isFalse);
-    });
+        final result = await service.getCurrentLocation();
+        expect(result.status, LocationResultStatus.permissionDeniedForever);
+        expect(promptShown, isFalse);
+      },
+    );
   });
 
   group('failure fallbacks', () {

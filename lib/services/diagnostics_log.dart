@@ -47,7 +47,7 @@ class DiagnosticsLog {
       final list = jsonDecode(raw) as List<dynamic>;
       return [
         for (final e in list)
-          if (e is Map) Map<String, dynamic>.from(e)
+          if (e is Map) Map<String, dynamic>.from(e),
       ];
     } catch (_) {
       return [];

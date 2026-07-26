@@ -49,5 +49,8 @@
 	     Always/background location. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to calculate accurate prayer times for where you are. It never leaves your device.</string>
+	<!-- AlarmKit (iOS 26+): required to schedule prominent prayer alarms. -->
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Allah Is Calling uses alarms to notify you when it is time for prayer.</string>
 </dict>
 </plist>

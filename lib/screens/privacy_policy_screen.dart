@@ -53,8 +53,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           for (final (title, body) in _sections) ...[
             Text(
               title,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(body, style: const TextStyle(height: 1.5)),
@@ -66,13 +65,17 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 final messenger = ScaffoldMessenger.of(context);
                 final uri = Uri.parse(AppConfig.privacyPolicyUrl);
                 try {
-                  final ok = await launchUrl(uri,
-                      mode: LaunchMode.externalApplication);
+                  final ok = await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
                   if (!ok) throw Exception('launchUrl returned false');
                 } catch (_) {
-                  messenger.showSnackBar(const SnackBar(
-                      content:
-                          Text('Could not open the privacy policy link.')));
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Could not open the privacy policy link.'),
+                    ),
+                  );
                 }
               },
               icon: const Icon(Icons.open_in_new, size: 18),

@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet: Quran text/translation from api.alquran.cloud and verse
+         audio streaming. Prayer times remain fully offline. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Location: used to calculate accurate prayer times for the user. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>

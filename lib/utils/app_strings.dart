@@ -82,6 +82,9 @@ class AppStrings {
   static const String answer = 'Answer';
   static const String declineLabel = 'Decline';
 
+  /// iOS notification category label for the secondary action (same id as Decline).
+  static const String dismiss = 'Dismiss';
+
   // Gentle responses.
   static const String mayAllahAccept = 'May Allah accept your salah.';
 
@@ -118,6 +121,63 @@ class AppStrings {
       'Use current location for accurate salah times?';
   static const String searchYourCity = 'Search your city';
   static const String enterCoordinatesManually = 'Enter coordinates manually';
+
+  // Qibla finder.
+  static const String qiblaTitle = 'Qibla Finder';
+  static const String qiblaAligned = 'You are facing the Qibla';
+  static const String qiblaRotateHint = 'Rotate until the arrow points up';
+  static const String qiblaNoCompass =
+      'Compass not available on this device. Use the bearing below with a '
+      'physical compass.';
+  static const String qiblaNeedsLocation =
+      'Set your location to find the Qibla direction.';
+  static const String qiblaCalibrationHint =
+      'If the reading seems off, move your phone in a figure-8 motion to '
+      'calibrate the compass.';
+
+  static String qiblaBearingLine(int degrees, String compassPoint) =>
+      'Qibla is $degrees\u00B0 $compassPoint of true North';
+
+  static String qiblaDistanceLine(int km) => '$km km to the Kaaba, Makkah';
+
+  // Quran reading module.
+  static const String quranTitle = 'Quran';
+  static const String quranDailyGoal = 'Daily Goal';
+  static const String quranEditGoal = 'Set daily goal';
+  static const String quranEditGoalHint = 'Verses per day';
+  static const String quranContinueReading = 'Continue Reading';
+  static const String quranQuickAccess = 'Quick Access';
+  static const String quranRecentlyRead = 'Recently Read';
+  static const String quranAllSurahs = 'All Surahs';
+  static const String quranBySurah = 'Surah';
+  static const String quranByJuz = 'Juz';
+  static const String quranStatsToday = 'Today';
+  static const String quranStatsWeek = 'This Week';
+  static const String quranStatsAllTime = 'All Time';
+  static const String quranBookmarks = 'Bookmarks';
+  static const String quranFavorites = 'Favorites';
+  static const String quranNoBookmarks = 'No bookmarks yet.';
+  static const String quranNoFavorites = 'No favorites yet.';
+  static const String quranTafsir = 'Tafsir';
+  static const String quranTafsirUnavailable =
+      'Tafsir for this verse is not available offline yet. Connect to the '
+      'internet once to download it.';
+  static const String quranFullTitle = 'Full Quran';
+  static const String quranFullSubtitle =
+      'Read continuously from Al-Fatihah to An-Nas';
+  static const String quranJumpToSurah = 'Jump to surah';
+  static const String quranLoadError =
+      'Could not load the Quran text. Check your internet connection and '
+      'try again. Previously opened surahs stay available offline.';
+  static const String quranRetry = 'Retry';
+  static const String quranGoalReached =
+      'Daily goal reached, may Allah accept.';
+
+  static String quranVersesProgress(int read, int goal) =>
+      '$read of $goal verses today';
+
+  static String quranHasanatNote(int hasanat) =>
+      '+$hasanat hasanat, in shaa Allah';
 
   // Disclaimer.
   static const String disclaimer =

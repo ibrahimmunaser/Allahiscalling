@@ -40,7 +40,18 @@ enum IncomingSalahResult {
 class IncomingSalahScreen extends StatefulWidget {
   final SalahPrayer prayer;
 
-  const IncomingSalahScreen({super.key, required this.prayer});
+  /// Optional scheduled fire time (AlarmKit / notification payload).
+  final DateTime? scheduledAt;
+
+  /// Optional AlarmKit alarm identifier for diagnostics / cancel.
+  final String? alarmId;
+
+  const IncomingSalahScreen({
+    super.key,
+    required this.prayer,
+    this.scheduledAt,
+    this.alarmId,
+  });
 
   @override
   State<IncomingSalahScreen> createState() => _IncomingSalahScreenState();
@@ -114,10 +125,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     if (patternSupported) {
       _usingVibrator = true;
       // Double buzz, pause, repeat — the cadence of a ringing phone.
-      Vibration.vibrate(
-        pattern: [0, 650, 350, 650, 1400],
-        repeat: 0,
-      );
+      Vibration.vibrate(pattern: [0, 650, 350, 650, 1400], repeat: 0);
     } else {
       _startRingingHaptics();
     }
@@ -226,7 +234,11 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF061511), AppTheme.nightBlue, AppTheme.deepGreen],
+                colors: [
+                  Color(0xFF061511),
+                  AppTheme.nightBlue,
+                  AppTheme.deepGreen,
+                ],
                 stops: [0.0, 0.45, 1.0],
               ),
             ),
@@ -258,10 +270,11 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                   height: 300,
                   child: AnimatedBuilder(
                     animation: _rippleController,
-                    builder: (context, child) => CustomPaint(
-                      painter: _RipplePainter(_rippleController.value),
-                      child: child,
-                    ),
+                    builder:
+                        (context, child) => CustomPaint(
+                          painter: _RipplePainter(_rippleController.value),
+                          child: child,
+                        ),
                     child: Center(
                       child: Container(
                         width: 132,
@@ -475,11 +488,7 @@ class _DeclineButton extends StatelessWidget {
           child: const SizedBox(
             width: 78,
             height: 78,
-            child: Icon(
-              Icons.call_end,
-              size: 34,
-              color: Colors.white,
-            ),
+            child: Icon(Icons.call_end, size: 34, color: Colors.white),
           ),
         ),
       ),
@@ -536,9 +545,9 @@ class _AnswerButton extends StatelessWidget {
       child: Material(
         shape: const CircleBorder(),
         clipBehavior: Clip.antiAlias,
-          child: Ink(
-              width: 90,
-              height: 90,
+        child: Ink(
+          width: 90,
+          height: 90,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(
@@ -550,11 +559,7 @@ class _AnswerButton extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             customBorder: const CircleBorder(),
-            child: const Icon(
-              Icons.call,
-              size: 36,
-              color: AppTheme.nightBlue,
-            ),
+            child: const Icon(Icons.call, size: 36, color: AppTheme.nightBlue),
           ),
         ),
       ),

@@ -46,8 +46,7 @@ class PrayerSettingsRepository {
     final raw = _prefs.getString(_settingsKey);
     if (raw == null) return const PrayerSettings();
     try {
-      return PrayerSettings.fromJson(
-          jsonDecode(raw) as Map<String, dynamic>);
+      return PrayerSettings.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       return const PrayerSettings();
     }
@@ -65,27 +64,25 @@ class PrayerSettingsRepository {
     try {
       final list = jsonDecode(raw) as List<dynamic>;
       return list
-          .map((e) =>
-              ScheduledReminder.fromJson(e as Map<String, dynamic>))
+          .map((e) => ScheduledReminder.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (_) {
       return [];
     }
   }
 
-  Future<void> saveScheduledReminders(
-      List<ScheduledReminder> reminders) async {
-    await _prefs.setString(_scheduledRemindersKey,
-        jsonEncode(reminders.map((r) => r.toJson()).toList()));
+  Future<void> saveScheduledReminders(List<ScheduledReminder> reminders) async {
+    await _prefs.setString(
+      _scheduledRemindersKey,
+      jsonEncode(reminders.map((r) => r.toJson()).toList()),
+    );
   }
 
   // -------------------------------------------------------------- bookkeeping
 
   DateTime? loadLastCalculationDate() {
     final millis = _prefs.getInt(_lastCalculationDateKey);
-    return millis == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(millis);
+    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
   Future<void> saveLastCalculationDate(DateTime date) async {
@@ -106,7 +103,9 @@ class PrayerSettingsRepository {
   }
 
   Future<void> saveLastKnownCoordinates(
-      double latitude, double longitude) async {
+    double latitude,
+    double longitude,
+  ) async {
     await _prefs.setDouble(_lastLatitudeKey, latitude);
     await _prefs.setDouble(_lastLongitudeKey, longitude);
   }
@@ -124,7 +123,9 @@ class PrayerSettingsRepository {
   /// Marks [prayer] completed on the local calendar day of [localDate].
   /// Only the last 60 days are retained.
   Future<void> savePrayerCompletion(
-      DateTime localDate, SalahPrayer prayer) async {
+    DateTime localDate,
+    SalahPrayer prayer,
+  ) async {
     final map = _loadCompletionsRaw();
     final key = _dateKey(localDate);
     final existing =
@@ -163,8 +164,12 @@ class PrayerSettingsRepository {
   ///
   /// Completion ("marked complete") is stored separately via
   /// [savePrayerCompletion] — it is an outcome, not a reminder response.
-  Future<void> savePrayerResponse(DateTime localDate, SalahPrayer prayer,
-      PrayerResponseState state, DateTime at) async {
+  Future<void> savePrayerResponse(
+    DateTime localDate,
+    SalahPrayer prayer,
+    PrayerResponseState state,
+    DateTime at,
+  ) async {
     final map = _loadResponsesRaw();
     final key = _dateKey(localDate);
     final day = Map<String, dynamic>.from(map[key] as Map? ?? {});
@@ -201,8 +206,7 @@ class PrayerSettingsRepository {
     return DateTime.fromMillisecondsSinceEpoch(millis.toInt());
   }
 
-  Map<String, dynamic>? _responseEntry(
-      DateTime localDate, SalahPrayer prayer) {
+  Map<String, dynamic>? _responseEntry(DateTime localDate, SalahPrayer prayer) {
     final day = _loadResponsesRaw()[_dateKey(localDate)];
     if (day is! Map) return null;
     final entry = day[prayer.name];

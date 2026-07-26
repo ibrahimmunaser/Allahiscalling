@@ -43,13 +43,12 @@ class LocationService {
     Future<LocationPermission> Function()? requestPermission,
     Future<Position> Function()? getPosition,
     Future<Position?> Function()? getLastKnown,
-  })  : _isServiceEnabled =
-            isServiceEnabled ?? Geolocator.isLocationServiceEnabled,
-        _checkPermission = checkPermission ?? Geolocator.checkPermission,
-        _requestPermission =
-            requestPermission ?? Geolocator.requestPermission,
-        _getPosition = getPosition ?? _defaultGetPosition,
-        _getLastKnown = getLastKnown ?? Geolocator.getLastKnownPosition;
+  }) : _isServiceEnabled =
+           isServiceEnabled ?? Geolocator.isLocationServiceEnabled,
+       _checkPermission = checkPermission ?? Geolocator.checkPermission,
+       _requestPermission = requestPermission ?? Geolocator.requestPermission,
+       _getPosition = getPosition ?? _defaultGetPosition,
+       _getLastKnown = getLastKnown ?? Geolocator.getLastKnownPosition;
 
   static Future<Position> _defaultGetPosition() =>
       Geolocator.getCurrentPosition(
@@ -61,8 +60,7 @@ class LocationService {
 
   /// Requests permission (if needed) and returns current coordinates.
   /// May show the OS permission prompt — explicit user action only.
-  Future<LocationResult> getCurrentLocation() =>
-      _locate(mayPrompt: true);
+  Future<LocationResult> getCurrentLocation() => _locate(mayPrompt: true);
 
   /// Returns current coordinates only when permission is already granted.
   /// Never shows a permission prompt; denied states return silently. Safe
@@ -85,7 +83,8 @@ class LocationService {
       }
       if (permission == LocationPermission.deniedForever) {
         return const LocationResult(
-            LocationResultStatus.permissionDeniedForever);
+          LocationResultStatus.permissionDeniedForever,
+        );
       }
 
       final position = await _getPosition();

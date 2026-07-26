@@ -30,12 +30,13 @@ class _DebugPrayerScreenState extends State<DebugPrayerScreen> {
     try {
       final pending =
           await controller.notificationService.pendingNotifications();
-      _pendingNotifications = pending.isEmpty
-          ? 'No pending notifications'
-          : [
-              'Pending count: ${pending.length}',
-              ...pending.map((p) => 'ID ${p.id}: ${p.title} / ${p.body}'),
-            ].join('\n');
+      _pendingNotifications =
+          pending.isEmpty
+              ? 'No pending notifications'
+              : [
+                'Pending count: ${pending.length}',
+                ...pending.map((p) => 'ID ${p.id}: ${p.title} / ${p.body}'),
+              ].join('\n');
     } catch (e) {
       _pendingNotifications = 'Error: $e';
     }
@@ -117,29 +118,36 @@ class _DebugPrayerScreenState extends State<DebugPrayerScreen> {
           ),
           _DebugSection(
             title: "Today's prayer times",
-            content: controller.today == null
-                ? 'Not calculated'
-                : controller.today!.orderedEntries
-                    .map((e) =>
-                        '${e.key.displayName}: ${e.value} (${formatTime(e.value)})')
-                    .join('\n'),
+            content:
+                controller.today == null
+                    ? 'Not calculated'
+                    : controller.today!.orderedEntries
+                        .map(
+                          (e) =>
+                              '${e.key.displayName}: ${e.value} (${formatTime(e.value)})',
+                        )
+                        .join('\n'),
           ),
           _DebugSection(
             title: 'Next scheduled reminder',
-            content: controller.nextReminder == null
-                ? 'None'
-                : 'ID ${controller.nextReminder!.notificationId}: '
-                    '${controller.nextReminder!.prayer.displayName} at '
-                    '${controller.nextReminder!.scheduledAt.toLocal()}',
+            content:
+                controller.nextReminder == null
+                    ? 'None'
+                    : 'ID ${controller.nextReminder!.notificationId}: '
+                        '${controller.nextReminder!.prayer.displayName} at '
+                        '${controller.nextReminder!.scheduledAt.toLocal()}',
           ),
           _DebugSection(
             title: 'Persisted scheduled IDs (${scheduled.length})',
-            content: scheduled.isEmpty
-                ? 'None'
-                : scheduled
-                    .map((r) =>
-                        'ID ${r.notificationId}: ${r.prayer.displayName} at ${r.scheduledAt.toLocal()}')
-                    .join('\n'),
+            content:
+                scheduled.isEmpty
+                    ? 'None'
+                    : scheduled
+                        .map(
+                          (r) =>
+                              'ID ${r.notificationId}: ${r.prayer.displayName} at ${r.scheduledAt.toLocal()}',
+                        )
+                        .join('\n'),
           ),
           _DebugSection(
             title: 'Pending notifications (plugin)',
@@ -167,14 +175,18 @@ class _DebugSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
             const SizedBox(height: 6),
             SelectableText(
               content,
               style: const TextStyle(
-                  fontFamily: 'monospace', fontSize: 12, height: 1.5),
+                fontFamily: 'monospace',
+                fontSize: 12,
+                height: 1.5,
+              ),
             ),
           ],
         ),

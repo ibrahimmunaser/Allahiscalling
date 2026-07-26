@@ -157,8 +157,9 @@ class PrayerSettings {
       'highLatitudeRule': highLatitudeRule.name,
       'customFajrAngle': customFajrAngle,
       'customIshaAngle': customIshaAngle,
-      'manualAdjustments': manualAdjustments
-          .map((prayer, minutes) => MapEntry(prayer.name, minutes)),
+      'manualAdjustments': manualAdjustments.map(
+        (prayer, minutes) => MapEntry(prayer.name, minutes),
+      ),
       'notificationsEnabled': notificationsEnabled,
       'snoozeMinutes': snoozeMinutes,
       'hijriAdjustmentDays': hijriAdjustmentDays,
@@ -188,15 +189,27 @@ class PrayerSettings {
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       locationLabel: json['locationLabel'] as String?,
-      locationSource: enumByName(LocationSource.values,
-          json['locationSource'], LocationSource.device),
+      locationSource: enumByName(
+        LocationSource.values,
+        json['locationSource'],
+        LocationSource.device,
+      ),
       timezone: json['timezone'] as String?,
-      calculationMethod: enumByName(CalculationMethodOption.values,
-          json['calculationMethod'], CalculationMethodOption.isna),
-      asrMethod:
-          enumByName(AsrMethod.values, json['asrMethod'], AsrMethod.standard),
-      highLatitudeRule: enumByName(HighLatitudeRuleOption.values,
-          json['highLatitudeRule'], HighLatitudeRuleOption.middleOfTheNight),
+      calculationMethod: enumByName(
+        CalculationMethodOption.values,
+        json['calculationMethod'],
+        CalculationMethodOption.isna,
+      ),
+      asrMethod: enumByName(
+        AsrMethod.values,
+        json['asrMethod'],
+        AsrMethod.standard,
+      ),
+      highLatitudeRule: enumByName(
+        HighLatitudeRuleOption.values,
+        json['highLatitudeRule'],
+        HighLatitudeRuleOption.middleOfTheNight,
+      ),
       customFajrAngle: (json['customFajrAngle'] as num?)?.toDouble() ?? 18.0,
       customIshaAngle: (json['customIshaAngle'] as num?)?.toDouble() ?? 17.0,
       manualAdjustments: adjustments,
@@ -205,8 +218,8 @@ class PrayerSettings {
       // older builds; it is intentionally ignored. The call-style incoming
       // experience is the single, consistent experience for every user.
       snoozeMinutes: (json['snoozeMinutes'] as num?)?.toInt() ?? 10,
-      hijriAdjustmentDays:
-          ((json['hijriAdjustmentDays'] as num?)?.toInt() ?? 0).clamp(-2, 2),
+      hijriAdjustmentDays: ((json['hijriAdjustmentDays'] as num?)?.toInt() ?? 0)
+          .clamp(-2, 2),
     );
   }
 

@@ -24,9 +24,10 @@ void main() {
       ScheduledReminder(
         notificationId: prayer.index * 1000 + 2,
         prayer: prayer,
-        scheduledAtMillis: prayerAt
-            .add(PrayerSchedulerService.followUpDelay)
-            .millisecondsSinceEpoch,
+        scheduledAtMillis:
+            prayerAt
+                .add(PrayerSchedulerService.followUpDelay)
+                .millisecondsSinceEpoch,
         kind: ReminderKind.followUp,
       );
 
@@ -49,15 +50,16 @@ void main() {
       expect(plan.followUpIdsToCancel, [dhuhrFollowUp.notificationId]);
       // The cancelled follow-up is removed from persistence.
       expect(
-          plan.updatedReminders
-              .any((r) => r.notificationId == dhuhrFollowUp.notificationId),
-          isFalse);
+        plan.updatedReminders.any(
+          (r) => r.notificationId == dhuhrFollowUp.notificationId,
+        ),
+        isFalse,
+      );
       // Other prayers' reminders are untouched.
       expect(
-          plan.updatedReminders
-              .where((r) => r.prayer == SalahPrayer.asr)
-              .length,
-          2);
+        plan.updatedReminders.where((r) => r.prayer == SalahPrayer.asr).length,
+        2,
+      );
     });
 
     test('does not cancel follow-ups of future occurrences', () {
@@ -72,9 +74,11 @@ void main() {
       );
       expect(plan.followUpIdsToCancel, isEmpty);
       expect(
-          plan.updatedReminders
-              .any((r) => r.notificationId == futureFollowUp.notificationId),
-          isTrue);
+        plan.updatedReminders.any(
+          (r) => r.notificationId == futureFollowUp.notificationId,
+        ),
+        isTrue,
+      );
     });
   });
 
@@ -89,16 +93,16 @@ void main() {
 
       expect(plan.shouldScheduleSnooze, isTrue);
       expect(plan.snoozeFireAt, now.add(const Duration(minutes: 10)));
-      final persisted = plan.updatedReminders
-          .where((r) => r.kind == ReminderKind.snooze)
-          .toList();
+      final persisted =
+          plan.updatedReminders
+              .where((r) => r.kind == ReminderKind.snooze)
+              .toList();
       expect(persisted, hasLength(1));
       expect(persisted.single.notificationId, plan.snoozeId);
       expect(persisted.single.prayer, SalahPrayer.dhuhr);
     });
 
-    test('window still open when the snooze fires before the next prayer',
-        () {
+    test('window still open when the snooze fires before the next prayer', () {
       final plan = planDecline(
         reminders: [primary(SalahPrayer.asr, asrTime)],
         prayer: SalahPrayer.dhuhr,
@@ -108,19 +112,21 @@ void main() {
       expect(plan.windowStillOpen, isTrue);
     });
 
-    test('window closed when the next prayer enters before the snooze fires',
-        () {
-      final justBeforeAsr = DateTime(2026, 7, 4, 16, 55);
-      final plan = planDecline(
-        reminders: [primary(SalahPrayer.asr, asrTime)],
-        prayer: SalahPrayer.dhuhr,
-        now: justBeforeAsr,
-        snoozeMinutes: 10, // 17:05, after Asr enters
-      );
-      expect(plan.windowStillOpen, isFalse);
-      // The snooze is still scheduled — with neutral copy downstream.
-      expect(plan.shouldScheduleSnooze, isTrue);
-    });
+    test(
+      'window closed when the next prayer enters before the snooze fires',
+      () {
+        final justBeforeAsr = DateTime(2026, 7, 4, 16, 55);
+        final plan = planDecline(
+          reminders: [primary(SalahPrayer.asr, asrTime)],
+          prayer: SalahPrayer.dhuhr,
+          now: justBeforeAsr,
+          snoozeMinutes: 10, // 17:05, after Asr enters
+        );
+        expect(plan.windowStillOpen, isFalse);
+        // The snooze is still scheduled — with neutral copy downstream.
+        expect(plan.shouldScheduleSnooze, isTrue);
+      },
+    );
   });
 
   group('duplicate callback idempotency', () {
@@ -148,9 +154,9 @@ void main() {
       expect(secondPlan.snoozeId, isNull);
       // Still exactly one persisted snooze.
       expect(
-          secondPlan.updatedReminders
-              .where((r) => r.kind == ReminderKind.snooze),
-          hasLength(1));
+        secondPlan.updatedReminders.where((r) => r.kind == ReminderKind.snooze),
+        hasLength(1),
+      );
     });
 
     test('a snooze for a different prayer does not block', () {
@@ -172,28 +178,31 @@ void main() {
   });
 
   group('no double reminder after Decline', () {
-    test('after Decline exactly one pending reminder exists for the prayer',
-        () {
-      final reminders = [
-        followUpFor(SalahPrayer.dhuhr, dhuhrTime),
-        primary(SalahPrayer.asr, asrTime),
-      ];
+    test(
+      'after Decline exactly one pending reminder exists for the prayer',
+      () {
+        final reminders = [
+          followUpFor(SalahPrayer.dhuhr, dhuhrTime),
+          primary(SalahPrayer.asr, asrTime),
+        ];
 
-      final plan = planDecline(
-        reminders: reminders,
-        prayer: SalahPrayer.dhuhr,
-        now: now,
-        snoozeMinutes: 10,
-      );
+        final plan = planDecline(
+          reminders: reminders,
+          prayer: SalahPrayer.dhuhr,
+          now: now,
+          snoozeMinutes: 10,
+        );
 
-      // The follow-up is gone; only the snooze remains for Dhuhr. The user
-      // gets exactly one reminder, not two.
-      final dhuhrPending = plan.updatedReminders
-          .where((r) => r.prayer == SalahPrayer.dhuhr)
-          .toList();
-      expect(dhuhrPending, hasLength(1));
-      expect(dhuhrPending.single.kind, ReminderKind.snooze);
-      expect(plan.followUpIdsToCancel, isNotEmpty);
-    });
+        // The follow-up is gone; only the snooze remains for Dhuhr. The user
+        // gets exactly one reminder, not two.
+        final dhuhrPending =
+            plan.updatedReminders
+                .where((r) => r.prayer == SalahPrayer.dhuhr)
+                .toList();
+        expect(dhuhrPending, hasLength(1));
+        expect(dhuhrPending.single.kind, ReminderKind.snooze);
+        expect(plan.followUpIdsToCancel, isNotEmpty);
+      },
+    );
   });
 }

@@ -25,8 +25,10 @@ void main() {
   final countryFile = File('$root/tool/geodata/countryInfo.txt');
 
   if (!citiesFile.existsSync()) {
-    stderr.writeln('Missing ${citiesFile.path}. Download cities1000.zip from '
-        'https://download.geonames.org/export/dump/ and unzip it there.');
+    stderr.writeln(
+      'Missing ${citiesFile.path}. Download cities1000.zip from '
+      'https://download.geonames.org/export/dump/ and unzip it there.',
+    );
     exit(1);
   }
 
@@ -104,14 +106,18 @@ void main() {
     count++;
   }
 
-  final outDir = Directory('$root/assets/geonames')..createSync(recursive: true);
+  final outDir = Directory('$root/assets/geonames')
+    ..createSync(recursive: true);
   final raw = utf8.encode(buffer.toString());
   final compressed = gzip.encode(raw);
   final outFile = File('${outDir.path}/cities.tsv.gz')
     ..writeAsBytesSync(compressed);
 
   stdout.writeln('Wrote $count cities.');
-  stdout.writeln('Raw size: ${(raw.length / 1024 / 1024).toStringAsFixed(1)} MB');
   stdout.writeln(
-      'Compressed: ${(compressed.length / 1024 / 1024).toStringAsFixed(1)} MB -> ${outFile.path}');
+    'Raw size: ${(raw.length / 1024 / 1024).toStringAsFixed(1)} MB',
+  );
+  stdout.writeln(
+    'Compressed: ${(compressed.length / 1024 / 1024).toStringAsFixed(1)} MB -> ${outFile.path}',
+  );
 }

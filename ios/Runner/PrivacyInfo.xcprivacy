@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Privacy manifest for the Runner (app) target only.
+
+	This declares required-reason API usage for THIS APP'S OWN Swift code
+	(ios/Runner/*.swift — the AlarmKit MethodChannel bridge and its App
+	Intent). It intentionally does NOT attempt to declare usage on behalf of
+	third-party CocoaPods/SwiftPM dependencies: Apple-maintained Flutter
+	plugins that touch required-reason APIs (e.g. shared_preferences,
+	path_provider, device_info_plus) ship their own PrivacyInfo.xcprivacy
+	inside their own frameworks/pods, which Apple's tooling merges with this
+	one at archive time. Adding speculative declarations here for APIs this
+	target's own code never calls would misrepresent actual usage.
+
+	Audited usage (see ios/Runner/AlarmKitPlugin.swift and
+	AnswerPrayerAlarmIntent.swift):
+	  - UserDefaults.standard is read/written/removed to bridge the AlarmKit
+	    "Answer" action's pending payload, and to track scheduled AlarmKit
+	    alarm IDs, entirely within this app (no App Group, no shared
+	    container) -> NSPrivacyAccessedAPICategoryUserDefaults, reason
+	    CA92.1 ("access info that is only accessible to the app itself").
+	  - No file-timestamp, disk-space, system-boot-time, or active-keyboard
+	    required-reason APIs are called anywhere in this target's own code
+	    (verified by search — no FileManager attribute/timestamp reads, no
+	    ProcessInfo.systemUptime/mach_absolute_time, no volume-capacity
+	    queries, no UITextInputMode/activeInputModes usage), so those four
+	    categories are deliberately omitted rather than declared "just in
+	    case".
+
+	This app collects no data of its own (no analytics, no tracking, no
+	network account, no ad SDKs — see lib/screens/privacy_policy_screen.dart)
+	so NSPrivacyCollectedDataTypes is empty and NSPrivacyTracking is false.
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

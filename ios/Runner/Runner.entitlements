@@ -10,5 +10,20 @@
 	     capability (verify in Xcode: Runner > Signing & Capabilities). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- AlarmKit: deliberately NOT added here. Apple's own AlarmKit docs
+	     (WWDC25, developer.apple.com/documentation/alarmkit) describe setup
+	     as ONLY NSAlarmKitUsageDescription (see Info.plist) + calling
+	     AlarmManager.requestAuthorization() — no entitlement is mentioned
+	     anywhere in Apple's official documentation. Third-party blog posts
+	     claim a special entitlement is required, but that is NOT confirmed
+	     by Apple and is not being taken on faith here — see
+	     IOS_ALARMKIT_ENTITLEMENT.md at the repo root for the full
+	     evidence review and the exact steps to verify this on a Mac before
+	     ever hand-adding a key here. A wrong/unsupported entitlement key
+	     can break code signing for the whole app, which is strictly worse
+	     than AlarmKit not firing yet. Regardless of how this resolves,
+	     IosHybridNotificationScheduler already falls back to local
+	     notifications on every iOS version, so the app builds, runs, and
+	     reliably delivers prayer alerts without this. -->
 </dict>
 </plist>

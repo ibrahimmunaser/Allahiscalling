@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.3+4
 
 environment:
   sdk: ^3.7.0
@@ -49,6 +49,12 @@ dependencies:
   hijri: ^3.0.1
   url_launcher: ^6.3.2
   package_info_plus: ^9.0.1
+  flutter_compass: ^0.8.1
+  http: ^1.6.0
+  audioplayers: ^6.6.0
+  path_provider: ^2.1.5
+  scrollable_positioned_list: ^0.3.8
+  confetti: ^0.8.0
 
 dev_dependencies:
   flutter_test:
@@ -86,6 +92,10 @@ flutter:
     # Offline city database built from GeoNames (CC BY 4.0, geonames.org).
     # Regenerate with: dart run tool/build_city_db.dart
     - assets/geonames/cities.tsv.gz
+    # Locally bundled tafsir: one small text file per verse, organized in
+    # folders per surah (assets/tafsir/surah_XXX/verse_YYY.txt). Verses
+    # without a bundled file fall back to a cached network source.
+    - assets/tafsir/surah_001/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

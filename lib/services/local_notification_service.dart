@@ -11,6 +11,8 @@ import '../models/salah_prayer.dart';
 import '../utils/app_strings.dart';
 import 'decline_flow.dart';
 import 'diagnostics_log.dart';
+import 'ios_alarmkit_service.dart';
+import 'ios_hybrid_notification_scheduler.dart';
 import 'timezone_service.dart';
 
 /// Payload attached to every notification so taps can route to the
@@ -26,8 +28,7 @@ class SalahNotificationPayload {
 
   const SalahNotificationPayload({required this.type, this.prayer});
 
-  String encode() =>
-      jsonEncode({'type': type, 'prayer': prayer?.name});
+  String encode() => jsonEncode({'type': type, 'prayer': prayer?.name});
 
   static SalahNotificationPayload? decode(String? raw) {
     if (raw == null || raw.isEmpty) return null;
@@ -35,9 +36,10 @@ class SalahNotificationPayload {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       return SalahNotificationPayload(
         type: map['type'] as String? ?? typePrayer,
-        prayer: map['prayer'] == null
-            ? null
-            : SalahPrayer.fromName(map['prayer'] as String),
+        prayer:
+            map['prayer'] == null
+                ? null
+                : SalahPrayer.fromName(map['prayer'] as String),
       );
     } catch (_) {
       return null;
@@ -45,10 +47,59 @@ class SalahNotificationPayload {
   }
 }
 
+/// Which channel actually ended up carrying a scheduled primary prayer
+/// reminder — never both, and never neither for an enabled prayer.
+enum PrimaryReminderChannel {
+  /// Delivered as a native AlarmKit alarm (iOS 26+, authorized).
+  alarmKit,
+
+  /// Delivered as an ordinary local notification (Android, older iOS, or
+  /// the AlarmKit fallback path).
+  notification,
+
+  /// Both the primary channel and its local-notification fallback failed.
+  /// The prayer has NO scheduled alert; callers must surface this rather
+  /// than silently continuing.
+  failed,
+}
+
+/// Outcome of a single [NotificationScheduler.schedulePrayerReminder] call,
+/// so a hybrid scheduler's caller can tell which channel actually carries
+/// the alert (or that neither does) instead of assuming success.
+class PrimaryReminderOutcome {
+  final PrimaryReminderChannel channel;
+
+  /// Set only when [channel] is [PrimaryReminderChannel.alarmKit] — the
+  /// native alarm UUID, so it can be persisted for cross-restart
+  /// cancellation/reconciliation.
+  final String? alarmKitId;
+
+  /// Set only when [channel] is [PrimaryReminderChannel.failed].
+  final Object? error;
+
+  const PrimaryReminderOutcome._(this.channel, this.alarmKitId, this.error);
+
+  const PrimaryReminderOutcome.alarmKit(String alarmKitId)
+    : this._(PrimaryReminderChannel.alarmKit, alarmKitId, null);
+
+  const PrimaryReminderOutcome.notification()
+    : this._(PrimaryReminderChannel.notification, null, null);
+
+  const PrimaryReminderOutcome.failed(Object error)
+    : this._(PrimaryReminderChannel.failed, null, error);
+
+  bool get succeeded => channel != PrimaryReminderChannel.failed;
+}
+
 /// Abstraction over the platform notification plugin so the scheduler can be
 /// unit-tested with a fake implementation.
 abstract class NotificationScheduler {
-  Future<void> schedulePrayerReminder({
+  /// Schedules the primary reminder for a prayer occurrence. Must never
+  /// throw for an expected failure (e.g. a platform channel error) — return
+  /// [PrimaryReminderOutcome.failed] instead, so a single bad primary can
+  /// never abort scheduling the rest of the batch (see
+  /// [PrayerSchedulerService.rescheduleAll]).
+  Future<PrimaryReminderOutcome> schedulePrayerReminder({
     required int id,
     required SalahPrayer prayer,
     required tz.TZDateTime scheduledAt,
@@ -108,17 +159,21 @@ class LocalNotificationService implements NotificationScheduler {
   /// the app is running (foreground/background). [actionId] is null for a
   /// plain body tap.
   void Function(SalahNotificationPayload payload, String? actionId)?
-      onNotificationTap;
+  onNotificationTap;
 
   LocalNotificationService([FlutterLocalNotificationsPlugin? plugin])
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   /// Deterministic ID per prayer occurrence: identical inputs always produce
   /// the same ID, so rescheduling replaces instead of duplicating.
   /// Layout: (minutes since epoch, cyclic) * 20 + slot.
   /// Slots 0-4 = prayer reminders, 5-9 = snoozes, 10-14 = follow-ups.
-  static int notificationIdFor(SalahPrayer prayer, DateTime scheduledAt,
-      {bool snooze = false, bool followUp = false}) {
+  static int notificationIdFor(
+    SalahPrayer prayer,
+    DateTime scheduledAt, {
+    bool snooze = false,
+    bool followUp = false,
+  }) {
     assert(!(snooze && followUp));
     final minutes = scheduledAt.toUtc().millisecondsSinceEpoch ~/ 60000;
     final slot = prayer.index + (snooze ? 5 : (followUp ? 10 : 0));
@@ -141,12 +196,16 @@ class LocalNotificationService implements NotificationScheduler {
             actions: [
               DarwinNotificationAction.plain(
                 actionPrayNow,
-                AppStrings.prayNow,
+                // iOS: Answer opens the prayer-call screen. Android uses
+                // "Pray Now" on its own action labels (see AndroidNotificationAction).
+                AppStrings.answer,
                 options: {DarwinNotificationActionOption.foreground},
               ),
               DarwinNotificationAction.plain(
                 actionDecline,
-                AppStrings.declineLabel,
+                // iOS label "Dismiss"; same action id as Android Decline
+                // (respectful snooze). Does not open the call UI.
+                AppStrings.dismiss,
               ),
             ],
           ),
@@ -180,21 +239,26 @@ class LocalNotificationService implements NotificationScheduler {
   }
 
   AndroidFlutterLocalNotificationsPlugin? get _androidImpl =>
-      _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
 
   IOSFlutterLocalNotificationsPlugin? get _iosImpl =>
-      _plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
 
   /// If the app was launched by tapping a notification (or an action on
   /// one), returns its payload and the action that launched it.
   Future<({SalahNotificationPayload payload, String? actionId})?>
-      getLaunchDetails() async {
+  getLaunchDetails() async {
     final details = await _plugin.getNotificationAppLaunchDetails();
     if (details?.didNotificationLaunchApp != true) return null;
     final payload = SalahNotificationPayload.decode(
-        details!.notificationResponse?.payload);
+      details!.notificationResponse?.payload,
+    );
     if (payload == null) return null;
     return (payload: payload, actionId: details.notificationResponse?.actionId);
   }
@@ -218,7 +282,8 @@ class LocalNotificationService implements NotificationScheduler {
       return granted;
     }
     if (Platform.isIOS) {
-      final granted = await _iosImpl?.requestPermissions(
+      final granted =
+          await _iosImpl?.requestPermissions(
             alert: true,
             badge: true,
             sound: true,
@@ -259,8 +324,10 @@ class LocalNotificationService implements NotificationScheduler {
 
   // -------------------------------------------------------------- scheduling
 
-  NotificationDetails _prayerDetails(
-      {required bool callStyle, bool withActions = true}) {
+  NotificationDetails _prayerDetails({
+    required bool callStyle,
+    bool withActions = true,
+  }) {
     return NotificationDetails(
       android: AndroidNotificationDetails(
         prayerChannelId,
@@ -268,29 +335,31 @@ class LocalNotificationService implements NotificationScheduler {
         channelDescription: prayerChannelDescription,
         importance: Importance.max,
         priority: Priority.max,
-        category: callStyle
-            ? AndroidNotificationCategory.call
-            : AndroidNotificationCategory.reminder,
+        category:
+            callStyle
+                ? AndroidNotificationCategory.call
+                : AndroidNotificationCategory.reminder,
         // Platform-compliant call-style presentation: shows over the lock
         // screen / as heads-up where the user has allowed it.
         fullScreenIntent: callStyle,
         visibility: NotificationVisibility.public,
         audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
-        actions: withActions
-            ? [
-                const AndroidNotificationAction(
-                  actionPrayNow,
-                  AppStrings.prayNow,
-                  showsUserInterface: true,
-                  cancelNotification: true,
-                ),
-                const AndroidNotificationAction(
-                  actionDecline,
-                  AppStrings.declineLabel,
-                  cancelNotification: true,
-                ),
-              ]
-            : null,
+        actions:
+            withActions
+                ? [
+                  const AndroidNotificationAction(
+                    actionPrayNow,
+                    AppStrings.prayNow,
+                    showsUserInterface: true,
+                    cancelNotification: true,
+                  ),
+                  const AndroidNotificationAction(
+                    actionDecline,
+                    AppStrings.declineLabel,
+                    cancelNotification: true,
+                  ),
+                ]
+                : null,
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
@@ -309,23 +378,39 @@ class LocalNotificationService implements NotificationScheduler {
   }
 
   @override
-  Future<void> schedulePrayerReminder({
+  Future<PrimaryReminderOutcome> schedulePrayerReminder({
     required int id,
     required SalahPrayer prayer,
     required tz.TZDateTime scheduledAt,
     required bool callStyle,
   }) async {
-    await _zonedSchedule(
-      id: id,
-      title: AppStrings.notificationTitle,
-      body: AppStrings.prayerEnteredBody(prayer.displayName),
-      scheduledAt: scheduledAt,
-      details: _prayerDetails(callStyle: callStyle),
-      payload: SalahNotificationPayload(
-        type: SalahNotificationPayload.typePrayer,
-        prayer: prayer,
-      ).encode(),
-    );
+    final title =
+        (!kIsWeb && Platform.isIOS)
+            ? AppStrings.incomingCallTitle
+            : AppStrings.notificationTitle;
+    try {
+      await _zonedSchedule(
+        id: id,
+        title: title,
+        body: AppStrings.prayerEnteredBody(prayer.displayName),
+        scheduledAt: scheduledAt,
+        details: _prayerDetails(callStyle: callStyle),
+        payload:
+            SalahNotificationPayload(
+              type: SalahNotificationPayload.typePrayer,
+              prayer: prayer,
+            ).encode(),
+      );
+      return const PrimaryReminderOutcome.notification();
+    } catch (e) {
+      // _zonedSchedule already retries inexact on a PlatformException; this
+      // only catches the (very rare) case where that retry also failed.
+      // Reporting failure here — rather than rethrowing — is what lets
+      // rescheduleAll's caller continue scheduling the remaining prayers
+      // instead of aborting the whole batch (see NotificationScheduler
+      // docs). The normal success path is completely unchanged.
+      return PrimaryReminderOutcome.failed(e);
+    }
   }
 
   @override
@@ -342,10 +427,11 @@ class LocalNotificationService implements NotificationScheduler {
       scheduledAt: scheduledAt,
       // Follow-ups are gentler: never full-screen, standard category.
       details: _prayerDetails(callStyle: false),
-      payload: SalahNotificationPayload(
-        type: SalahNotificationPayload.typeSnooze,
-        prayer: prayer,
-      ).encode(),
+      payload:
+          SalahNotificationPayload(
+            type: SalahNotificationPayload.typeSnooze,
+            prayer: prayer,
+          ).encode(),
     );
   }
 
@@ -361,9 +447,10 @@ class LocalNotificationService implements NotificationScheduler {
       scheduledAt: scheduledAt,
       // Plain notification: no call presentation, no Answer/Decline actions.
       details: _prayerDetails(callStyle: false, withActions: false),
-      payload: const SalahNotificationPayload(
-        type: SalahNotificationPayload.typeRefresh,
-      ).encode(),
+      payload:
+          const SalahNotificationPayload(
+            type: SalahNotificationPayload.typeRefresh,
+          ).encode(),
     );
   }
 
@@ -395,24 +482,28 @@ class LocalNotificationService implements NotificationScheduler {
     } catch (_) {
       zone = tz.local;
     }
-    final fireAtZoned = fireAt != null
-        ? tz.TZDateTime.from(fireAt, zone)
-        : tz.TZDateTime.now(zone).add(Duration(minutes: minutes));
+    final fireAtZoned =
+        fireAt != null
+            ? tz.TZDateTime.from(fireAt, zone)
+            : tz.TZDateTime.now(zone).add(Duration(minutes: minutes));
     final id = notificationIdFor(prayer, fireAtZoned, snooze: true);
     await _zonedSchedule(
       id: id,
-      title: windowStillOpen
-          ? AppStrings.snoozeTitle
-          : AppStrings.genericReminderTitle,
-      body: windowStillOpen
-          ? AppStrings.snoozeBody(prayer.displayName)
-          : AppStrings.genericReminderBody,
+      title:
+          windowStillOpen
+              ? AppStrings.snoozeTitle
+              : AppStrings.genericReminderTitle,
+      body:
+          windowStillOpen
+              ? AppStrings.snoozeBody(prayer.displayName)
+              : AppStrings.genericReminderBody,
       scheduledAt: fireAtZoned,
       details: _prayerDetails(callStyle: callStyle),
-      payload: SalahNotificationPayload(
-        type: SalahNotificationPayload.typeSnooze,
-        prayer: prayer,
-      ).encode(),
+      payload:
+          SalahNotificationPayload(
+            type: SalahNotificationPayload.typeSnooze,
+            prayer: prayer,
+          ).encode(),
     );
     return id;
   }
@@ -433,9 +524,10 @@ class LocalNotificationService implements NotificationScheduler {
         body,
         scheduledAt,
         details,
-        androidScheduleMode: exact
-            ? AndroidScheduleMode.exactAllowWhileIdle
-            : AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode:
+            exact
+                ? AndroidScheduleMode.exactAllowWhileIdle
+                : AndroidScheduleMode.inexactAllowWhileIdle,
         payload: payload,
       );
     } on PlatformException catch (e) {
@@ -461,10 +553,11 @@ class LocalNotificationService implements NotificationScheduler {
       AppStrings.notificationTitle,
       AppStrings.testNotificationBody,
       _prayerDetails(callStyle: true),
-      payload: const SalahNotificationPayload(
-        type: SalahNotificationPayload.typeTest,
-        prayer: SalahPrayer.dhuhr,
-      ).encode(),
+      payload:
+          const SalahNotificationPayload(
+            type: SalahNotificationPayload.typeTest,
+            prayer: SalahPrayer.dhuhr,
+          ).encode(),
     );
   }
 
@@ -516,7 +609,13 @@ class LocalNotificationService implements NotificationScheduler {
 //   7. Follow-up cancellation +
 //      idempotency                   — shared performDecline() (same code
 //                                      as foreground; see decline_flow.dart).
-//   8. Error logging                 — failures are never swallowed: logged
+//   8. AlarmKit-aware cancellation   — on iOS 26+, a fresh
+//                                      IosHybridNotificationScheduler is
+//                                      built here too (mirroring main.dart)
+//                                      so this isolate's reconciliation never
+//                                      mistakes a persisted AlarmKit primary
+//                                      for stale and drops it.
+//   9. Error logging                 — failures are never swallowed: logged
 //                                      to the console AND to the persistent
 //                                      DiagnosticsLog ring buffer (no prayer
 //                                      names or personal data in entries).
@@ -531,12 +630,17 @@ Future<void> notificationActionBackground(NotificationResponse response) async {
   final prayer = payload?.prayer;
   if (prayer == null) {
     // Never schedule a snooze from an unparseable payload.
-    debugPrint('[bg-action] Decline received with malformed payload; '
-        'no snooze scheduled.');
+    debugPrint(
+      '[bg-action] Decline received with malformed payload; '
+      'no snooze scheduled.',
+    );
     try {
       final prefs = await SharedPreferences.getInstance();
       await DiagnosticsLog.recordError(
-          prefs, 'notification_action', 'malformed payload on Decline');
+        prefs,
+        'notification_action',
+        'malformed payload on Decline',
+      );
     } catch (_) {}
     return;
   }
@@ -551,9 +655,21 @@ Future<void> notificationActionBackground(NotificationResponse response) async {
 
     final service = LocalNotificationService();
     await service.initialize();
+    // Mirror main.dart's production scheduler choice so this isolate's
+    // reconciliation/cancellation agrees with the foreground app about
+    // which channel (AlarmKit vs local) carries each persisted primary.
+    final alarmKit = (!kIsWeb && Platform.isIOS) ? IosAlarmKitService() : null;
+    final scheduler =
+        alarmKit != null
+            ? IosHybridNotificationScheduler(
+              notifications: service,
+              alarmKit: alarmKit,
+            )
+            : service;
     await performDecline(
       prefs: prefs,
       notificationService: service,
+      notificationScheduler: scheduler,
       prayer: prayer,
     );
     debugPrint('[bg-action] Decline handled in background isolate.');
@@ -561,7 +677,10 @@ Future<void> notificationActionBackground(NotificationResponse response) async {
     debugPrint('[bg-action] Background Decline FAILED: $e\n$st');
     if (prefs != null) {
       await DiagnosticsLog.recordError(
-          prefs, 'notification_action', 'background Decline failed: $e');
+        prefs,
+        'notification_action',
+        'background Decline failed: $e',
+      );
     }
   }
 }

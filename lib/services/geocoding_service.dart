@@ -32,8 +32,7 @@ class GeocodingService {
     final cached = cache[normalized];
     if (cached != null) {
       return [
-        for (final item in cached)
-          City.fromJson(item as Map<String, dynamic>)
+        for (final item in cached) City.fromJson(item as Map<String, dynamic>),
       ];
     }
 
@@ -52,14 +51,17 @@ class GeocodingService {
       String region = '';
       try {
         final placemarks = await geo.placemarkFromCoordinates(
-            location.latitude, location.longitude);
+          location.latitude,
+          location.longitude,
+        );
         if (placemarks.isNotEmpty) {
           final p = placemarks.first;
-          name = p.locality?.isNotEmpty == true
-              ? p.locality!
-              : (p.subAdministrativeArea?.isNotEmpty == true
-                  ? p.subAdministrativeArea!
-                  : name);
+          name =
+              p.locality?.isNotEmpty == true
+                  ? p.locality!
+                  : (p.subAdministrativeArea?.isNotEmpty == true
+                      ? p.subAdministrativeArea!
+                      : name);
           region = p.administrativeArea ?? '';
           country = p.country ?? '';
         }
@@ -67,17 +69,21 @@ class GeocodingService {
         debugPrint('Reverse geocoding for label failed: $e');
       }
 
-      results.add(City(
-        name: name,
-        alternateNames: const [],
-        country: country,
-        region: region,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        timezone: timezoneService.timezoneForCoordinates(
-            location.latitude, location.longitude),
-        population: 0,
-      ));
+      results.add(
+        City(
+          name: name,
+          alternateNames: const [],
+          country: country,
+          region: region,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timezone: timezoneService.timezoneForCoordinates(
+            location.latitude,
+            location.longitude,
+          ),
+          population: 0,
+        ),
+      );
     }
 
     if (results.isNotEmpty) {

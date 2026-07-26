@@ -14,6 +14,8 @@ import '../widgets/location_feedback.dart';
 import '../widgets/prayer_times_list.dart';
 import 'debug_prayer_screen.dart';
 import 'manual_location_screen.dart';
+import 'qibla_screen.dart';
+import 'quran_hub_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -35,20 +37,21 @@ class _HomeScreenState extends State<HomeScreen> {
     if (needsFsiGuidance && mounted) {
       final proceed = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text(AppStrings.fullScreenGuidanceTitle),
-          content: const Text(AppStrings.fullScreenGuidanceBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Not now'),
+        builder:
+            (dialogContext) => AlertDialog(
+              title: const Text(AppStrings.fullScreenGuidanceTitle),
+              content: const Text(AppStrings.fullScreenGuidanceBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Not now'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Continue'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
       );
       if (proceed == true) {
         await controller.acceptFullScreenGuidance();
@@ -62,62 +65,69 @@ class _HomeScreenState extends State<HomeScreen> {
       await showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
+        builder:
+            (sheetContext) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.battery_alert_outlined,
-                        color: AppTheme.emerald),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        AppStrings.batteryGuidanceTitle,
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700),
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.battery_alert_outlined,
+                          color: AppTheme.emerald,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            AppStrings.batteryGuidanceTitle,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(AppStrings.batteryGuidanceBody),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$manufacturer devices may silence scheduled reminders to '
+                      'save battery. Look for "Battery" or "Background activity" '
+                      'in this app\'s system settings and remove restrictions.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('Got it'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop();
+                              LocationService().openAppSettings();
+                            },
+                            child: const Text('Open settings'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                const Text(AppStrings.batteryGuidanceBody),
-                const SizedBox(height: 8),
-                Text(
-                  '$manufacturer devices may silence scheduled reminders to '
-                  'save battery. Look for "Battery" or "Background activity" '
-                  'in this app\'s system settings and remove restrictions.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () =>
-                            Navigator.of(sheetContext).pop(),
-                        child: const Text('Got it'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          LocationService().openAppSettings();
-                        },
-                        child: const Text('Open settings'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
       );
       await controller.markBatteryGuidanceShown();
     }
@@ -144,83 +154,90 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            onPressed:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
           ),
         ],
       ),
-      body: !controller.initialized
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: controller.recalculateAndReschedule,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _HijriDateLine(controller: controller),
-                  const SizedBox(height: 10),
-                  _NextPrayerCard(controller: controller),
-                  const SizedBox(height: 16),
-                  if (controller.pendingCompletionPrayer != null) ...[
-                    _CompletionCard(
-                        controller: controller,
-                        prayer: controller.pendingCompletionPrayer!),
+      bottomNavigationBar: const _QuranQiblaBottomBar(),
+      body:
+          !controller.initialized
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: controller.recalculateAndReschedule,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _HijriDateLine(controller: controller),
+                    const SizedBox(height: 10),
+                    _NextPrayerCard(controller: controller),
                     const SizedBox(height: 16),
-                  ],
-                  if (controller.today != null) ...[
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Today',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.deepGreen,
+                    if (controller.pendingCompletionPrayer != null) ...[
+                      _CompletionCard(
+                        controller: controller,
+                        prayer: controller.pendingCompletionPrayer!,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (controller.today != null) ...[
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Today',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.deepGreen,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            PrayerTimesList(
-                              day: controller.today!,
-                              highlighted: controller.nextPrayer?.key,
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              PrayerTimesList(
+                                day: controller.today!,
+                                highlighted: controller.nextPrayer?.key,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ] else
+                      _LocationNeededCard(controller: controller),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text(
+                        AppStrings.disclaimer,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
-                  ] else
-                    _LocationNeededCard(controller: controller),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      AppStrings.disclaimer,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed:
+                            () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const DebugPrayerScreen(),
+                              ),
+                            ),
+                        icon: const Icon(Icons.bug_report_outlined, size: 16),
+                        label: const Text('Debug info'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey.shade500,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const DebugPrayerScreen()),
-                      ),
-                      icon: const Icon(Icons.bug_report_outlined, size: 16),
-                      label: const Text('Debug info'),
-                      style: TextButton.styleFrom(
-                          foregroundColor: Colors.grey.shade500),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
     );
   }
 }
@@ -238,7 +255,8 @@ class _HijriDateLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = controller.nowInUserZone();
     final hijri = HijriCalendar.fromDate(
-        now.add(Duration(days: controller.settings.hijriAdjustmentDays)));
+      now.add(Duration(days: controller.settings.hijriAdjustmentDays)),
+    );
     return Center(
       child: Text(
         '${hijri.hDay} ${hijri.longMonthName} ${hijri.hYear} AH'
@@ -273,66 +291,69 @@ class _NextPrayerCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: next == null
-          ? const Text(
-              'Prayer times unavailable.\nPlease set your location.',
-              style: TextStyle(color: AppTheme.ivory, fontSize: 16),
-              textAlign: TextAlign.center,
-            )
-          : Column(
-              children: [
-                const Text(
-                  'Next Prayer',
-                  style: TextStyle(
-                    color: AppTheme.softGold,
-                    fontSize: 14,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  next.key.displayName,
-                  style: const TextStyle(
-                    color: AppTheme.ivory,
-                    fontSize: 40,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formatTime(next.value),
-                  style: const TextStyle(
-                    color: AppTheme.ivory,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.gold.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.gold),
-                  ),
-                  child: _CountdownText(
-                    controller: controller,
-                    target: next.value,
-                  ),
-                ),
-                if (controller.settings.locationLabel != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    controller.settings.locationLabel!,
+      child:
+          next == null
+              ? const Text(
+                'Prayer times unavailable.\nPlease set your location.',
+                style: TextStyle(color: AppTheme.ivory, fontSize: 16),
+                textAlign: TextAlign.center,
+              )
+              : Column(
+                children: [
+                  const Text(
+                    'Next Prayer',
                     style: TextStyle(
-                      color: AppTheme.ivory.withValues(alpha: 0.7),
-                      fontSize: 12,
+                      color: AppTheme.softGold,
+                      fontSize: 14,
+                      letterSpacing: 1.2,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    next.key.displayName,
+                    style: const TextStyle(
+                      color: AppTheme.ivory,
+                      fontSize: 40,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    formatTime(next.value),
+                    style: const TextStyle(
+                      color: AppTheme.ivory,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.gold.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppTheme.gold),
+                    ),
+                    child: _CountdownText(
+                      controller: controller,
+                      target: next.value,
+                    ),
+                  ),
+                  if (controller.settings.locationLabel != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      controller.settings.locationLabel!,
+                      style: TextStyle(
+                        color: AppTheme.ivory.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
     );
   }
 }
@@ -362,8 +383,7 @@ class _CountdownTextState extends State<_CountdownText> {
       setState(() {});
       // Countdown finished: the next prayer changed. Nudge the controller
       // so the whole card (name, time, highlight) refreshes once.
-      if (!widget.target
-          .isAfter(widget.controller.nowInUserZone())) {
+      if (!widget.target.isAfter(widget.controller.nowInUserZone())) {
         widget.controller.refreshNextPrayer();
       }
     });
@@ -377,8 +397,9 @@ class _CountdownTextState extends State<_CountdownText> {
 
   @override
   Widget build(BuildContext context) {
-    final remaining =
-        widget.target.difference(widget.controller.nowInUserZone());
+    final remaining = widget.target.difference(
+      widget.controller.nowInUserZone(),
+    );
     return Text(
       'in ${formatCountdown(remaining)}',
       style: const TextStyle(
@@ -437,8 +458,11 @@ class _LocationNeededCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Icon(Icons.location_on_outlined,
-                size: 40, color: AppTheme.emerald),
+            const Icon(
+              Icons.location_on_outlined,
+              size: 40,
+              color: AppTheme.emerald,
+            ),
             const SizedBox(height: 12),
             const Text(
               AppStrings.useLocationPrompt,
@@ -464,23 +488,110 @@ class _LocationNeededCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ManualLocationScreen()),
-              ),
+              onPressed:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ManualLocationScreen(),
+                    ),
+                  ),
               icon: const Icon(Icons.search, size: 18),
               label: const Text(AppStrings.searchYourCity),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) =>
-                        const ManualLocationScreen(initialTab: 1)),
-              ),
+              onPressed:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ManualLocationScreen(initialTab: 1),
+                    ),
+                  ),
               child: const Text(AppStrings.enterCoordinatesManually),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Split bottom bar: half Quran, half Qibla.
+class _QuranQiblaBottomBar extends StatelessWidget {
+  const _QuranQiblaBottomBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.deepGreen,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            children: [
+              Expanded(
+                child: _BottomBarHalf(
+                  icon: Icons.menu_book_outlined,
+                  label: AppStrings.quranTitle,
+                  onTap:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const QuranHubScreen(),
+                        ),
+                      ),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 36,
+                color: AppTheme.ivory.withValues(alpha: 0.25),
+              ),
+              Expanded(
+                child: _BottomBarHalf(
+                  icon: Icons.explore_outlined,
+                  label: AppStrings.qiblaTitle,
+                  onTap:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const QiblaScreen()),
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomBarHalf extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _BottomBarHalf({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: AppTheme.ivory, size: 26),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.ivory,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

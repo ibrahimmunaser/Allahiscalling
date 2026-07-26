@@ -12,15 +12,15 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    repository =
-        PrayerSettingsRepository(await SharedPreferences.getInstance());
+    repository = PrayerSettingsRepository(
+      await SharedPreferences.getInstance(),
+    );
   });
 
   group('settings persistence', () {
     test('defaults are returned when nothing is stored', () {
       final settings = repository.loadSettings();
-      expect(settings.calculationMethod,
-          CalculationMethodOption.isna);
+      expect(settings.calculationMethod, CalculationMethodOption.isna);
       expect(settings.asrMethod, AsrMethod.standard);
       expect(settings.snoozeMinutes, 10);
       expect(settings.notificationsEnabled, isTrue);
@@ -71,20 +71,26 @@ void main() {
     test('hijri adjustment defaults to 0 and clamps to -2..+2', () async {
       expect(repository.loadSettings().hijriAdjustmentDays, 0);
 
-      SharedPreferences.setMockInitialValues(
-          {'prayer_settings': '{"hijriAdjustmentDays": 9}'});
-      final repo =
-          PrayerSettingsRepository(await SharedPreferences.getInstance());
+      SharedPreferences.setMockInitialValues({
+        'prayer_settings': '{"hijriAdjustmentDays": 9}',
+      });
+      final repo = PrayerSettingsRepository(
+        await SharedPreferences.getInstance(),
+      );
       expect(repo.loadSettings().hijriAdjustmentDays, 2);
     });
 
     test('corrupted stored JSON falls back to defaults', () async {
-      SharedPreferences.setMockInitialValues(
-          {'prayer_settings': 'not json at all'});
-      final repo =
-          PrayerSettingsRepository(await SharedPreferences.getInstance());
-      expect(repo.loadSettings().calculationMethod,
-          CalculationMethodOption.isna);
+      SharedPreferences.setMockInitialValues({
+        'prayer_settings': 'not json at all',
+      });
+      final repo = PrayerSettingsRepository(
+        await SharedPreferences.getInstance(),
+      );
+      expect(
+        repo.loadSettings().calculationMethod,
+        CalculationMethodOption.isna,
+      );
     });
   });
 
@@ -117,14 +123,22 @@ void main() {
 
   group('default method suggestions', () {
     test('always returns ISNA as the Sunni default', () {
-      expect(PrayerSettings.suggestMethodForTimezone('America/New_York'),
-          CalculationMethodOption.isna);
-      expect(PrayerSettings.suggestMethodForTimezone('Asia/Riyadh'),
-          CalculationMethodOption.isna);
-      expect(PrayerSettings.suggestMethodForTimezone('Europe/London'),
-          CalculationMethodOption.isna);
-      expect(PrayerSettings.suggestMethodForTimezone(null),
-          CalculationMethodOption.isna);
+      expect(
+        PrayerSettings.suggestMethodForTimezone('America/New_York'),
+        CalculationMethodOption.isna,
+      );
+      expect(
+        PrayerSettings.suggestMethodForTimezone('Asia/Riyadh'),
+        CalculationMethodOption.isna,
+      );
+      expect(
+        PrayerSettings.suggestMethodForTimezone('Europe/London'),
+        CalculationMethodOption.isna,
+      );
+      expect(
+        PrayerSettings.suggestMethodForTimezone(null),
+        CalculationMethodOption.isna,
+      );
     });
   });
 }

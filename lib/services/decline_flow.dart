@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/salah_prayer.dart';
 import '../models/scheduled_reminder.dart';
 import '../repositories/prayer_settings_repository.dart';
+import 'ios_hybrid_notification_scheduler.dart';
 import 'local_notification_service.dart';
 import 'notification_budget.dart';
 import 'prayer_scheduler_service.dart';
@@ -73,7 +74,8 @@ DeclinePlan planDecline({
   int? nextPrayerMillis;
 
   for (final r in reminders) {
-    final isCurrentWindowFollowUp = r.kind == ReminderKind.followUp &&
+    final isCurrentWindowFollowUp =
+        r.kind == ReminderKind.followUp &&
         r.prayer == prayer &&
         r.scheduledAtMillis > nowMillis &&
         r.scheduledAtMillis - followUpDelay.inMilliseconds <= nowMillis;
@@ -115,14 +117,19 @@ DeclinePlan planDecline({
     );
   }
 
-  final snoozeId =
-      LocalNotificationService.notificationIdFor(prayer, fireAt, snooze: true);
-  kept.add(ScheduledReminder(
-    notificationId: snoozeId,
-    prayer: prayer,
-    scheduledAtMillis: fireAtMillis,
-    kind: ReminderKind.snooze,
-  ));
+  final snoozeId = LocalNotificationService.notificationIdFor(
+    prayer,
+    fireAt,
+    snooze: true,
+  );
+  kept.add(
+    ScheduledReminder(
+      notificationId: snoozeId,
+      prayer: prayer,
+      scheduledAtMillis: fireAtMillis,
+      kind: ReminderKind.snooze,
+    ),
+  );
 
   return DeclinePlan(
     followUpIdsToCancel: followUpIdsToCancel,
@@ -144,13 +151,26 @@ DeclinePlan planDecline({
 /// actually still has pending, evicts lower-priority notifications if
 /// necessary (never a primary prayer reminder), and keeps persistence in
 /// sync with every cancellation/addition it makes.
+///
+/// [notificationScheduler], when supplied, MUST be used for cancellation and
+/// reconciliation instead of [notificationService] directly — on iOS 26+
+/// this is the hybrid AlarmKit/local scheduler, and a persisted primary may
+/// be AlarmKit-backed. Reconciling against [notificationService] alone
+/// (which only ever reports local-notification IDs) would make every live
+/// AlarmKit primary look stale and silently drop it from persistence the
+/// next time this function saves the reminder list. Defaults to
+/// [notificationService] so Android and pre-AlarmKit iOS are unaffected.
+/// [scheduleSnooze] itself always stays on [notificationService] — snoozes
+/// are local notifications on every platform, never AlarmKit.
 Future<void> performDecline({
   required SharedPreferences prefs,
   required LocalNotificationService notificationService,
+  NotificationScheduler? notificationScheduler,
   required SalahPrayer prayer,
   DateTime Function()? nowFn,
   SchedulingPolicy? policy,
 }) async {
+  final scheduler = notificationScheduler ?? notificationService;
   final now = (nowFn ?? DateTime.now)();
 
   // Read the user's snooze preferences straight from stored settings.
@@ -166,6 +186,15 @@ Future<void> performDecline({
   }
 
   final reminders = _loadReminders(prefs);
+
+  // A fresh scheduler instance (as constructed by both callers of this
+  // function) starts with no in-memory AlarmKit tracking; without this, the
+  // coordinator's reconciliation below would see every AlarmKit-backed
+  // primary as vanished and drop it from persistence. See doc comment.
+  if (scheduler is IosHybridNotificationScheduler) {
+    scheduler.restoreTrackedAlarmIds(reminders);
+  }
+
   final plan = planDecline(
     reminders: reminders,
     prayer: prayer,
@@ -177,22 +206,23 @@ Future<void> performDecline({
   // a slot regardless of the cap — this is what lets a Decline "trade" a
   // follow-up for a snooze at net-zero cost to the budget.
   for (final id in plan.followUpIdsToCancel) {
-    await notificationService.cancel(id);
+    await scheduler.cancel(id);
   }
 
   // `plan.updatedReminders` already has the follow-up(s) above removed and
   // (when scheduling) the new snooze appended; strip the snooze back out to
   // get the persisted state as it stands right before admission.
-  final beforeCandidate = plan.snoozeId == null
-      ? plan.updatedReminders
-      : plan.updatedReminders
-          .where((r) => r.notificationId != plan.snoozeId)
-          .toList();
+  final beforeCandidate =
+      plan.snoozeId == null
+          ? plan.updatedReminders
+          : plan.updatedReminders
+              .where((r) => r.notificationId != plan.snoozeId)
+              .toList();
 
   if (plan.shouldScheduleSnooze) {
     final repository = PrayerSettingsRepository(prefs);
     final coordinator = NotificationBudgetCoordinator(
-      notificationScheduler: notificationService,
+      notificationScheduler: scheduler,
       repository: repository,
       policy: policy ?? SchedulingPolicy.forPlatform(),
     );
@@ -205,14 +235,15 @@ Future<void> performDecline({
     await coordinator.admit(
       persisted: beforeCandidate,
       candidate: snoozeCandidate,
-      schedule: () => notificationService.scheduleSnooze(
-        prayer: prayer,
-        minutes: snoozeMinutes,
-        callStyle: true,
-        userTimezone: timezone,
-        windowStillOpen: plan.windowStillOpen,
-        fireAt: plan.snoozeFireAt,
-      ),
+      schedule:
+          () => notificationService.scheduleSnooze(
+            prayer: prayer,
+            minutes: snoozeMinutes,
+            callStyle: true,
+            userTimezone: timezone,
+            windowStillOpen: plan.windowStillOpen,
+            fireAt: plan.snoozeFireAt,
+          ),
       ignoredIds: const {LocalNotificationService.testNotificationId},
     );
   } else {
@@ -233,7 +264,7 @@ List<ScheduledReminder> _loadReminders(SharedPreferences prefs) {
     final list = jsonDecode(raw) as List<dynamic>;
     return [
       for (final e in list)
-        ScheduledReminder.fromJson(e as Map<String, dynamic>)
+        ScheduledReminder.fromJson(e as Map<String, dynamic>),
     ];
   } catch (_) {
     return [];

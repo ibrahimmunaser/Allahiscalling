@@ -56,20 +56,24 @@ void main() {
 
     test('throws when location is missing', () {
       const noLocation = PrayerSettings(timezone: 'UTC');
-      expect(() => service.calculateForDate(noLocation, DateTime(2026, 7, 4)),
-          throwsStateError);
+      expect(
+        () => service.calculateForDate(noLocation, DateTime(2026, 7, 4)),
+        throwsStateError,
+      );
     });
   });
 
   group('manual minute adjustments', () {
     test('shift each prayer by the configured offset', () {
-      final adjusted = newYork.copyWith(manualAdjustments: {
-        SalahPrayer.fajr: 2,
-        SalahPrayer.dhuhr: 0,
-        SalahPrayer.asr: -1,
-        SalahPrayer.maghrib: 0,
-        SalahPrayer.isha: 3,
-      });
+      final adjusted = newYork.copyWith(
+        manualAdjustments: {
+          SalahPrayer.fajr: 2,
+          SalahPrayer.dhuhr: 0,
+          SalahPrayer.asr: -1,
+          SalahPrayer.maghrib: 0,
+          SalahPrayer.isha: 3,
+        },
+      );
 
       final date = DateTime(2026, 7, 4);
       final base = service.calculateForDate(newYork, date);
@@ -102,20 +106,29 @@ void main() {
     test('Hanafi Asr is later than Standard Asr', () {
       final date = DateTime(2026, 7, 4);
       final standard = service.calculateForDate(
-          newYork.copyWith(asrMethod: AsrMethod.standard), date);
+        newYork.copyWith(asrMethod: AsrMethod.standard),
+        date,
+      );
       final hanafi = service.calculateForDate(
-          newYork.copyWith(asrMethod: AsrMethod.hanafi), date);
+        newYork.copyWith(asrMethod: AsrMethod.hanafi),
+        date,
+      );
 
       expect(
-        hanafi.timeFor(SalahPrayer.asr)
+        hanafi
+            .timeFor(SalahPrayer.asr)
             .isAfter(standard.timeFor(SalahPrayer.asr)),
         isTrue,
       );
       // Other prayers are unaffected.
-      expect(hanafi.timeFor(SalahPrayer.dhuhr),
-          standard.timeFor(SalahPrayer.dhuhr));
-      expect(hanafi.timeFor(SalahPrayer.maghrib),
-          standard.timeFor(SalahPrayer.maghrib));
+      expect(
+        hanafi.timeFor(SalahPrayer.dhuhr),
+        standard.timeFor(SalahPrayer.dhuhr),
+      );
+      expect(
+        hanafi.timeFor(SalahPrayer.maghrib),
+        standard.timeFor(SalahPrayer.maghrib),
+      );
     });
   });
 
@@ -125,7 +138,9 @@ void main() {
       final date = DateTime(2026, 7, 4);
       final localDay = service.calculateForDate(newYork, date);
       final utcDay = service.calculateForDate(
-          newYork.copyWith(timezone: 'UTC'), date);
+        newYork.copyWith(timezone: 'UTC'),
+        date,
+      );
 
       final localDhuhr = localDay.timeFor(SalahPrayer.dhuhr);
       final utcDhuhr = utcDay.timeFor(SalahPrayer.dhuhr);
@@ -140,12 +155,16 @@ void main() {
   group('daylight saving changes', () {
     test('UTC offset changes across the spring-forward boundary', () {
       // US DST starts 2026-03-08 in America/New_York.
-      final before = service
-          .calculateForDate(newYork, DateTime(2026, 3, 7))
-          .timeFor(SalahPrayer.dhuhr) as tz.TZDateTime;
-      final after = service
-          .calculateForDate(newYork, DateTime(2026, 3, 9))
-          .timeFor(SalahPrayer.dhuhr) as tz.TZDateTime;
+      final before =
+          service
+                  .calculateForDate(newYork, DateTime(2026, 3, 7))
+                  .timeFor(SalahPrayer.dhuhr)
+              as tz.TZDateTime;
+      final after =
+          service
+                  .calculateForDate(newYork, DateTime(2026, 3, 9))
+                  .timeFor(SalahPrayer.dhuhr)
+              as tz.TZDateTime;
 
       expect(before.timeZoneOffset, const Duration(hours: -5));
       expect(after.timeZoneOffset, const Duration(hours: -4));
@@ -157,12 +176,16 @@ void main() {
 
     test('UTC offset changes across the fall-back boundary', () {
       // US DST ends 2026-11-01 in America/New_York.
-      final before = service
-          .calculateForDate(newYork, DateTime(2026, 10, 31))
-          .timeFor(SalahPrayer.dhuhr) as tz.TZDateTime;
-      final after = service
-          .calculateForDate(newYork, DateTime(2026, 11, 2))
-          .timeFor(SalahPrayer.dhuhr) as tz.TZDateTime;
+      final before =
+          service
+                  .calculateForDate(newYork, DateTime(2026, 10, 31))
+                  .timeFor(SalahPrayer.dhuhr)
+              as tz.TZDateTime;
+      final after =
+          service
+                  .calculateForDate(newYork, DateTime(2026, 11, 2))
+                  .timeFor(SalahPrayer.dhuhr)
+              as tz.TZDateTime;
 
       expect(before.timeZoneOffset, const Duration(hours: -4));
       expect(after.timeZoneOffset, const Duration(hours: -5));
@@ -193,16 +216,22 @@ void main() {
       final date = DateTime(2026, 6, 21); // summer solstice
 
       final middle = service.calculateForDate(
-          oslo.copyWith(
-              highLatitudeRule: HighLatitudeRuleOption.middleOfTheNight),
-          date);
+        oslo.copyWith(
+          highLatitudeRule: HighLatitudeRuleOption.middleOfTheNight,
+        ),
+        date,
+      );
       final seventh = service.calculateForDate(
-          oslo.copyWith(
-              highLatitudeRule: HighLatitudeRuleOption.seventhOfTheNight),
-          date);
+        oslo.copyWith(
+          highLatitudeRule: HighLatitudeRuleOption.seventhOfTheNight,
+        ),
+        date,
+      );
 
-      expect(middle.timeFor(SalahPrayer.fajr),
-          isNot(seventh.timeFor(SalahPrayer.fajr)));
+      expect(
+        middle.timeFor(SalahPrayer.fajr),
+        isNot(seventh.timeFor(SalahPrayer.fajr)),
+      );
     });
   });
 }

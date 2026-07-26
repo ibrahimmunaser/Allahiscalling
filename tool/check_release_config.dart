@@ -30,10 +30,7 @@ void main(List<String> args) {
     if (!arg.startsWith('--')) continue;
     final idx = arg.indexOf('=');
     if (idx < 0) continue;
-    final key = arg
-        .substring(2, idx)
-        .replaceAll('-', '_')
-        .toUpperCase();
+    final key = arg.substring(2, idx).replaceAll('-', '_').toUpperCase();
     values[key] = arg.substring(idx + 1);
   }
 
@@ -49,7 +46,8 @@ void main(List<String> args) {
       uri.host.isEmpty ||
       uri.host.contains('example.')) {
     problems.add(
-        'PRIVACY_POLICY_URL is not a valid production https URL: $privacyUrl');
+      'PRIVACY_POLICY_URL is not a valid production https URL: $privacyUrl',
+    );
   }
 
   final supportEmail = values['SUPPORT_EMAIL'] ?? '';
@@ -64,11 +62,15 @@ void main(List<String> args) {
     }
     stderr.writeln('');
     stderr.writeln('Set the values as environment variables or pass them:');
-    stderr.writeln('  dart run tool/check_release_config.dart '
-        '--privacy-policy-url=https://yourdomain.com/privacy '
-        '--support-email=support@yourdomain.com');
-    stderr.writeln('Then build with the SAME values via --dart-define '
-        '(see RELEASE_CHECKLIST.md).');
+    stderr.writeln(
+      '  dart run tool/check_release_config.dart '
+      '--privacy-policy-url=https://yourdomain.com/privacy '
+      '--support-email=support@yourdomain.com',
+    );
+    stderr.writeln(
+      'Then build with the SAME values via --dart-define '
+      '(see RELEASE_CHECKLIST.md).',
+    );
     exit(1);
   }
 

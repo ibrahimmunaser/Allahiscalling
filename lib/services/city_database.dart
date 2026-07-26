@@ -32,7 +32,10 @@ class CityDatabase {
 
   Future<void> _load() async {
     final data = await rootBundle.load('assets/geonames/cities.tsv.gz');
-    final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
     _cities = await compute(_parseCityDatabase, bytes);
     _loading = null;
   }
@@ -74,10 +77,12 @@ class CityDatabase {
       if (score == 0) continue;
 
       if (qualifiers.isNotEmpty &&
-          !qualifiers.every((part) => part
-              .split(' ')
-              .where((t) => t.isNotEmpty)
-              .every((t) => _matchesPlace(city, t)))) {
+          !qualifiers.every(
+            (part) => part
+                .split(' ')
+                .where((t) => t.isNotEmpty)
+                .every((t) => _matchesPlace(city, t)),
+          )) {
         continue;
       }
 
@@ -97,8 +102,11 @@ class CityDatabase {
             city.nameFolded.codeUnitAt(0) != namePart.codeUnitAt(0)) {
           continue;
         }
-        final distance =
-            _boundedLevenshtein(city.nameFolded, namePart, maxDistance);
+        final distance = _boundedLevenshtein(
+          city.nameFolded,
+          namePart,
+          maxDistance,
+        );
         if (distance < 0) continue;
         var score = 300.0 - distance * 80;
         score += math.min(math.log(city.city.population + 10) * 8, 120);
@@ -128,8 +136,11 @@ class CityDatabase {
   /// Bounded selection: a single O(n·k) pass keeping only the best [limit]
   /// candidates, instead of materializing and sorting a 170k-entry list.
   /// For the small limits used by the UI this allocates almost nothing.
-  Future<List<City>> nearby(double latitude, double longitude,
-      {int limit = 20}) async {
+  Future<List<City>> nearby(
+    double latitude,
+    double longitude, {
+    int limit = 20,
+  }) async {
     await ensureLoaded();
     final best = <(City, double)>[];
     var worst = double.infinity;
@@ -235,10 +246,10 @@ class _IndexedCity {
   final String regionFolded;
 
   _IndexedCity(this.city)
-      : nameFolded = _fold(city.name),
-        altFolded = [for (final a in city.alternateNames) _fold(a)],
-        countryFolded = _fold(city.country),
-        regionFolded = _fold(city.region);
+    : nameFolded = _fold(city.name),
+      altFolded = [for (final a in city.alternateNames) _fold(a)],
+      countryFolded = _fold(city.country),
+      regionFolded = _fold(city.region);
 }
 
 /// Lowercase + strip diacritics so "São Paulo" matches "sao paulo".
@@ -288,17 +299,20 @@ List<_IndexedCity> _parseCityDatabase(Uint8List bytes) {
     final lat = double.tryParse(f[4]);
     final lng = double.tryParse(f[5]);
     if (lat == null || lng == null) continue;
-    result.add(_IndexedCity(City(
-      name: f[0],
-      alternateNames:
-          f[1].isEmpty ? const [] : f[1].split('|'),
-      country: f[2],
-      region: f[3],
-      latitude: lat,
-      longitude: lng,
-      timezone: f[6],
-      population: int.tryParse(f[7]) ?? 0,
-    )));
+    result.add(
+      _IndexedCity(
+        City(
+          name: f[0],
+          alternateNames: f[1].isEmpty ? const [] : f[1].split('|'),
+          country: f[2],
+          region: f[3],
+          latitude: lat,
+          longitude: lng,
+          timezone: f[6],
+          population: int.tryParse(f[7]) ?? 0,
+        ),
+      ),
+    );
   }
   return result;
 }

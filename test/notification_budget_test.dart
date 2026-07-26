@@ -34,13 +34,15 @@ class FakeBudgetScheduler implements NotificationScheduler {
   }
 
   @override
-  Future<void> schedulePrayerReminder({
+  Future<PrimaryReminderOutcome> schedulePrayerReminder({
     required int id,
     required SalahPrayer prayer,
     required tz.TZDateTime scheduledAt,
     required bool callStyle,
-  }) async =>
-      pending.add(id);
+  }) async {
+    pending.add(id);
+    return const PrimaryReminderOutcome.notification();
+  }
 
   @override
   Future<void> scheduleFollowUpReminder({
@@ -48,15 +50,13 @@ class FakeBudgetScheduler implements NotificationScheduler {
     required SalahPrayer prayer,
     required tz.TZDateTime scheduledAt,
     required bool callStyle,
-  }) async =>
-      pending.add(id);
+  }) async => pending.add(id);
 
   @override
   Future<void> scheduleRefreshReminder({
     required int id,
     required tz.TZDateTime scheduledAt,
-  }) async =>
-      pending.add(id);
+  }) async => pending.add(id);
 }
 
 void main() {
@@ -69,20 +69,18 @@ void main() {
     ReminderKind kind = ReminderKind.prayer,
     int minutesFromNow = 60,
     SalahPrayer prayer = SalahPrayer.dhuhr,
-  }) =>
-      ScheduledReminder(
-        notificationId: id,
-        prayer: prayer,
-        scheduledAtMillis:
-            now.add(Duration(minutes: minutesFromNow)).millisecondsSinceEpoch,
-        kind: kind,
-      );
+  }) => ScheduledReminder(
+    notificationId: id,
+    prayer: prayer,
+    scheduledAtMillis:
+        now.add(Duration(minutes: minutesFromNow)).millisecondsSinceEpoch,
+    kind: kind,
+  );
 
   group('reconcile (pure)', () {
     test('stale persisted reminder not present in the OS', () {
       final persisted = [reminder(1), reminder(2)];
-      final result =
-          reconcile(persisted: persisted, actualPendingIds: {1});
+      final result = reconcile(persisted: persisted, actualPendingIds: {1});
 
       expect(result.confirmed.map((r) => r.notificationId), [1]);
       expect(result.staleInPersistence.map((r) => r.notificationId), [2]);
@@ -91,8 +89,10 @@ void main() {
 
     test('OS reminder present but missing from persistence', () {
       final persisted = [reminder(1)];
-      final result =
-          reconcile(persisted: persisted, actualPendingIds: {1, 999});
+      final result = reconcile(
+        persisted: persisted,
+        actualPendingIds: {1, 999},
+      );
 
       expect(result.confirmed.map((r) => r.notificationId), [1]);
       expect(result.staleInPersistence, isEmpty);
@@ -112,11 +112,17 @@ void main() {
   group('planAdmission (pure)', () {
     test('exactly 59 pending, then add a snooze: admitted, no eviction', () {
       final reconciled = [for (var i = 0; i < 59; i++) reminder(i)];
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       final plan = planAdmission(
-          reconciled: reconciled, candidate: candidate, maxPending: 60);
+        reconciled: reconciled,
+        candidate: candidate,
+        maxPending: 60,
+      );
 
       expect(plan.admitted, isTrue);
       expect(plan.idsToEvict, isEmpty);
@@ -135,11 +141,17 @@ void main() {
         reminder(400, kind: ReminderKind.snooze, minutesFromNow: 5),
       ];
       expect(reconciled, hasLength(60));
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       final plan = planAdmission(
-          reconciled: reconciled, candidate: candidate, maxPending: 60);
+        reconciled: reconciled,
+        candidate: candidate,
+        maxPending: 60,
+      );
 
       expect(plan.admitted, isTrue);
       // The follow-up furthest in the future (90 min) is evicted, not the
@@ -147,7 +159,9 @@ void main() {
       expect(plan.idsToEvict, [201]);
       expect(plan.updatedReminders, hasLength(60));
       expect(
-          plan.updatedReminders.where((r) => r.notificationId == 201), isEmpty);
+        plan.updatedReminders.where((r) => r.notificationId == 201),
+        isEmpty,
+      );
       expect(plan.updatedReminders, contains(candidate));
     });
 
@@ -161,7 +175,10 @@ void main() {
       );
 
       final plan = planAdmission(
-          reconciled: reconciled, candidate: candidate, maxPending: 60);
+        reconciled: reconciled,
+        candidate: candidate,
+        maxPending: 60,
+      );
 
       expect(plan.isReplacement, isTrue);
       expect(plan.idsToEvict, isEmpty);
@@ -172,11 +189,17 @@ void main() {
     test('nothing evictable (all primaries): candidate is not admitted, '
         'primaries are untouched', () {
       final reconciled = [for (var i = 0; i < 60; i++) reminder(i)];
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       final plan = planAdmission(
-          reconciled: reconciled, candidate: candidate, maxPending: 60);
+        reconciled: reconciled,
+        candidate: candidate,
+        maxPending: 60,
+      );
 
       expect(plan.admitted, isFalse);
       expect(plan.idsToEvict, isEmpty);
@@ -189,7 +212,10 @@ void main() {
       final candidate = reminder(1000, kind: ReminderKind.snooze);
 
       final plan = planAdmission(
-          reconciled: reconciled, candidate: candidate, maxPending: null);
+        reconciled: reconciled,
+        candidate: candidate,
+        maxPending: null,
+      );
 
       expect(plan.admitted, isTrue);
       expect(plan.updatedReminders, hasLength(201));
@@ -201,8 +227,9 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      repository =
-          PrayerSettingsRepository(await SharedPreferences.getInstance());
+      repository = PrayerSettingsRepository(
+        await SharedPreferences.getInstance(),
+      );
     });
 
     const policy = SchedulingPolicy(daysToSchedule: 7, maxPending: 60);
@@ -210,13 +237,19 @@ void main() {
     test('exactly 59 pending, then add a snooze: admitted with zero '
         'cancellations', () async {
       final persisted = [for (var i = 0; i < 59; i++) reminder(i)];
-      final scheduler = FakeBudgetScheduler(persisted.map((r) => r.notificationId).toSet());
+      final scheduler = FakeBudgetScheduler(
+        persisted.map((r) => r.notificationId).toSet(),
+      );
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
       var scheduleCalls = 0;
 
       final admitted = await coordinator.admit(
@@ -242,14 +275,19 @@ void main() {
         reminder(300, kind: ReminderKind.refresh, minutesFromNow: 500),
       ];
       expect(persisted, hasLength(60));
-      final scheduler =
-          FakeBudgetScheduler(persisted.map((r) => r.notificationId).toSet());
+      final scheduler = FakeBudgetScheduler(
+        persisted.map((r) => r.notificationId).toSet(),
+      );
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       final admitted = await coordinator.admit(
         persisted: persisted,
@@ -272,11 +310,15 @@ void main() {
       // silently dropped) without the app's knowledge.
       final scheduler = FakeBudgetScheduler({1});
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       await coordinator.admit(
         persisted: persisted,
@@ -290,26 +332,32 @@ void main() {
       expect(finalList.map((r) => r.notificationId), [1, 1000]);
     });
 
-    test('OS reminder present but missing from persistence is cancelled',
-        () async {
-      final persisted = [reminder(1)];
-      final scheduler = FakeBudgetScheduler({1, 999});
-      final coordinator = NotificationBudgetCoordinator(
+    test(
+      'OS reminder present but missing from persistence is cancelled',
+      () async {
+        final persisted = [reminder(1)];
+        final scheduler = FakeBudgetScheduler({1, 999});
+        final coordinator = NotificationBudgetCoordinator(
           notificationScheduler: scheduler,
           repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+          policy: policy,
+        );
+        final candidate = reminder(
+          1000,
+          kind: ReminderKind.snooze,
+          minutesFromNow: 10,
+        );
 
-      await coordinator.admit(
-        persisted: persisted,
-        candidate: candidate,
-        schedule: () async => scheduler.pending.add(candidate.notificationId),
-      );
+        await coordinator.admit(
+          persisted: persisted,
+          candidate: candidate,
+          schedule: () async => scheduler.pending.add(candidate.notificationId),
+        );
 
-      expect(scheduler.cancelledIds, contains(999));
-      expect(scheduler.pending, isNot(contains(999)));
-    });
+        expect(scheduler.cancelledIds, contains(999));
+        expect(scheduler.pending, isNot(contains(999)));
+      },
+    );
 
     test('duplicate admission of the same candidate at the cap is '
         'idempotent (no second eviction)', () async {
@@ -318,14 +366,19 @@ void main() {
         reminder(200, kind: ReminderKind.followUp, minutesFromNow: 90),
         reminder(201, kind: ReminderKind.followUp, minutesFromNow: 120),
       ];
-      final scheduler =
-          FakeBudgetScheduler(persisted.map((r) => r.notificationId).toSet());
+      final scheduler = FakeBudgetScheduler(
+        persisted.map((r) => r.notificationId).toSet(),
+      );
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
 
       await coordinator.admit(
         persisted: persisted,
@@ -354,14 +407,18 @@ void main() {
         'persisted usage is well under the cap', () async {
       final persisted = [for (var i = 0; i < 30; i++) reminder(i)];
       final scheduler = FakeBudgetScheduler(
-          persisted.map((r) => r.notificationId).toSet())
-        ..pendingIdsError = Exception('channel unavailable');
+        persisted.map((r) => r.notificationId).toSet(),
+      )..pendingIdsError = Exception('channel unavailable');
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
       var scheduleCalls = 0;
 
       final admitted = await coordinator.admit(
@@ -380,14 +437,18 @@ void main() {
       // 56/60: within the 5-slot query-failure safety margin.
       final persisted = [for (var i = 0; i < 56; i++) reminder(i)];
       final scheduler = FakeBudgetScheduler(
-          persisted.map((r) => r.notificationId).toSet())
-        ..pendingIdsError = Exception('channel unavailable');
+        persisted.map((r) => r.notificationId).toSet(),
+      )..pendingIdsError = Exception('channel unavailable');
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final candidate =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final candidate = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
       var scheduleCalls = 0;
 
       final admitted = await coordinator.admit(
@@ -404,22 +465,26 @@ void main() {
 
     test('a failed pendingIds query still admits a same-ID replacement '
         'even at the cap (net-zero, always safe)', () async {
-      final existing =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 999);
-      final persisted = [
-        for (var i = 0; i < 59; i++) reminder(i),
-        existing,
-      ];
+      final existing = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 999,
+      );
+      final persisted = [for (var i = 0; i < 59; i++) reminder(i), existing];
       expect(persisted, hasLength(60));
       final scheduler = FakeBudgetScheduler(
-          persisted.map((r) => r.notificationId).toSet())
-        ..pendingIdsError = Exception('channel unavailable');
+        persisted.map((r) => r.notificationId).toSet(),
+      )..pendingIdsError = Exception('channel unavailable');
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
-      final replacement =
-          reminder(1000, kind: ReminderKind.snooze, minutesFromNow: 10);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
+      final replacement = reminder(
+        1000,
+        kind: ReminderKind.snooze,
+        minutesFromNow: 10,
+      );
       var scheduleCalls = 0;
 
       final admitted = await coordinator.admit(
@@ -433,10 +498,9 @@ void main() {
       final finalList = repository.loadScheduledReminders();
       expect(finalList, hasLength(60));
       expect(
-          finalList
-              .firstWhere((r) => r.notificationId == 1000)
-              .scheduledAtMillis,
-          replacement.scheduledAtMillis);
+        finalList.firstWhere((r) => r.notificationId == 1000).scheduledAtMillis,
+        replacement.scheduledAtMillis,
+      );
     });
   });
 
@@ -445,8 +509,9 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      repository =
-          PrayerSettingsRepository(await SharedPreferences.getInstance());
+      repository = PrayerSettingsRepository(
+        await SharedPreferences.getInstance(),
+      );
     });
 
     const policy = SchedulingPolicy(daysToSchedule: 7, maxPending: 60);
@@ -457,9 +522,10 @@ void main() {
       final matchingFollowUp = ScheduledReminder(
         notificationId: 555,
         prayer: SalahPrayer.dhuhr,
-        scheduledAtMillis: dhuhrTime
-            .add(PrayerSchedulerService.followUpDelay)
-            .millisecondsSinceEpoch,
+        scheduledAtMillis:
+            dhuhrTime
+                .add(PrayerSchedulerService.followUpDelay)
+                .millisecondsSinceEpoch,
         kind: ReminderKind.followUp,
       );
       final others = [for (var i = 0; i < 59; i++) reminder(i)];
@@ -475,20 +541,23 @@ void main() {
       expect(plan.followUpIdsToCancel, [555]);
 
       final scheduler = FakeBudgetScheduler(
-          allReminders.map((r) => r.notificationId).toSet());
+        allReminders.map((r) => r.notificationId).toSet(),
+      );
       // Cancel the matched follow-up exactly as performDecline does.
       for (final id in plan.followUpIdsToCancel) {
         await scheduler.cancel(id);
       }
-      final beforeCandidate = plan.updatedReminders
-          .where((r) => r.notificationId != plan.snoozeId)
-          .toList();
+      final beforeCandidate =
+          plan.updatedReminders
+              .where((r) => r.notificationId != plan.snoozeId)
+              .toList();
       expect(beforeCandidate, hasLength(59));
 
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
       final snoozeCandidate = ScheduledReminder(
         notificationId: plan.snoozeId!,
         prayer: SalahPrayer.dhuhr,
@@ -499,7 +568,8 @@ void main() {
       await coordinator.admit(
         persisted: beforeCandidate,
         candidate: snoozeCandidate,
-        schedule: () async => scheduler.pending.add(snoozeCandidate.notificationId),
+        schedule:
+            () async => scheduler.pending.add(snoozeCandidate.notificationId),
       );
 
       // Only the matched follow-up was ever cancelled — no additional
@@ -531,16 +601,19 @@ void main() {
       expect(plan.followUpIdsToCancel, isEmpty);
 
       final scheduler = FakeBudgetScheduler(
-          allReminders.map((r) => r.notificationId).toSet());
-      final beforeCandidate = plan.updatedReminders
-          .where((r) => r.notificationId != plan.snoozeId)
-          .toList();
+        allReminders.map((r) => r.notificationId).toSet(),
+      );
+      final beforeCandidate =
+          plan.updatedReminders
+              .where((r) => r.notificationId != plan.snoozeId)
+              .toList();
       expect(beforeCandidate, hasLength(60));
 
       final coordinator = NotificationBudgetCoordinator(
-          notificationScheduler: scheduler,
-          repository: repository,
-          policy: policy);
+        notificationScheduler: scheduler,
+        repository: repository,
+        policy: policy,
+      );
       final snoozeCandidate = ScheduledReminder(
         notificationId: plan.snoozeId!,
         prayer: SalahPrayer.dhuhr,
@@ -551,7 +624,8 @@ void main() {
       final admitted = await coordinator.admit(
         persisted: beforeCandidate,
         candidate: snoozeCandidate,
-        schedule: () async => scheduler.pending.add(snoozeCandidate.notificationId),
+        schedule:
+            () async => scheduler.pending.add(snoozeCandidate.notificationId),
       );
 
       expect(admitted, isTrue);
