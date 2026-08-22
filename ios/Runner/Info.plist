@@ -46,8 +46,12 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<!-- Only when-in-use location is requested; the app never asks for
-	     Always/background location. -->
+	     Always/background location. The Always key below is required by
+	     Apple's static analysis because the geolocator plugin references
+	     the always-authorization API, even though this app never calls it. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is used to calculate accurate prayer times for where you are. It never leaves your device.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Your location is used to calculate accurate prayer times for where you are. It never leaves your device.</string>
 	<!-- AlarmKit (iOS 26+): required to schedule prominent prayer alarms. -->
 	<key>NSAlarmKitUsageDescription</key>
