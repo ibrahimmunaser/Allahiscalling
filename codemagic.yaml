@@ -1,0 +1,181 @@
+workflows:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # iOS — one-time: create App Store provisioning profile on Apple
+  #
+  # Run this ONCE manually in Codemagic (or via a `profile-*` tag) if Fetch
+  # profiles shows 0 for this app's bundle ID. After it succeeds:
+  #   Code signing → iOS provisioning profiles → Fetch profiles
+  #   → select com.salahinvite.allahInvitesYouToSalah App Store profile
+  #   → reference name: salah_appstore
+  # ────────────────────────────────────────────────────────────────────────────
+  ios-create-profile:
+    name: iOS Create Profile
+    max_build_duration: 15
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: Codemagic
+
+    environment:
+      vars:
+        BUNDLE_ID: com.salahinvite.allahInvitesYouToSalah
+        PROFILE_NAME: Allah Invites You to Salah App Store
+
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'profile-*'
+          include: true
+
+    scripts:
+      - name: Create App Store provisioning profile on Apple
+        script: |
+          set -e
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+
+          if app-store-connect profiles list \
+              --type IOS_APP_STORE \
+              --name "$PROFILE_NAME" \
+              --profiles-dir "$PROFILE_DIR" \
+              --save && compgen -G "$PROFILE_DIR"/*.mobileprovision > /dev/null; then
+            echo "Profile already exists on Apple."
+            exit 0
+          fi
+
+          echo "Registering bundle ID on Apple Developer Portal (if needed)..."
+          BUNDLE_ID_RES=$(app-store-connect bundle-ids list --json | python3 -c "
+          import json, sys, os
+          bid = os.environ['BUNDLE_ID']
+          for item in json.load(sys.stdin):
+              attrs = item.get('attributes') or {}
+              if attrs.get('identifier') == bid:
+                  print(item['id'])
+                  break
+          else:
+              sys.exit('MISSING')
+          " || echo MISSING)
+
+          if [ "$BUNDLE_ID_RES" = "MISSING" ]; then
+            BUNDLE_ID_RES=$(app-store-connect bundle-ids create "$BUNDLE_ID" \
+              --name "Allah Invites You to Salah" \
+              --platform IOS --json | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+          fi
+
+          CERT_ID=$(app-store-connect certificates list --json | python3 -c "
+          import json, sys
+          certs = json.load(sys.stdin)
+          preferred = ('IOS_DISTRIBUTION', 'DISTRIBUTION')
+          for cert_type in preferred:
+              for cert in certs:
+                  attrs = cert.get('attributes') or {}
+                  if attrs.get('certificateType') == cert_type:
+                      print(cert['id'])
+                      break
+              else:
+                  continue
+              break
+          else:
+              sys.exit('No distribution certificate found on Apple Developer Portal')
+          ")
+
+          echo "Creating App Store provisioning profile on Apple Developer Portal..."
+          app-store-connect profiles create "$BUNDLE_ID_RES" \
+            --certificate-ids "$CERT_ID" \
+            --type IOS_APP_STORE \
+            --name "$PROFILE_NAME" \
+            --profiles-dir "$PROFILE_DIR" \
+            --save
+
+          echo "Done. Now fetch the profile in Codemagic UI with reference: salah_appstore"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # iOS — builds a signed IPA and uploads to TestFlight
+  #
+  # Prerequisites in Codemagic Team Settings (already set up for this account):
+  #   1. Integrations → Apple Developer Portal → API key named "Codemagic"
+  #   2. Code signing → iOS certificates → "themuslimman certificate" (production,
+  #      team-wide — reused across apps on this Apple Developer account)
+  #   3. Run ios-create-profile once, then Fetch profiles → reference: salah_appstore
+  # ────────────────────────────────────────────────────────────────────────────
+  ios-release:
+    name: iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: Codemagic
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: com.salahinvite.allahInvitesYouToSalah
+        PRIVACY_POLICY_URL: https://ibrahimmunaser.github.io/Allahiscalling/
+        SUPPORT_EMAIL: themuslimman77@gmail.com
+        WEBSITE_URL: https://ibrahimmunaser.github.io/Allahiscalling/
+      ios_signing:
+        provisioning_profiles:
+          - salah_appstore
+        certificates:
+          - themuslimman certificate
+
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Install CocoaPods
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Set up code signing on Xcode project
+        script: |
+          cat > /Users/builder/export_options.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          xcode-project use-profiles \
+            --project ios/Runner.xcodeproj \
+            --archive-method app-store \
+            --export-options-plist /Users/builder/export_options.plist \
+            --code-signing-setup-verbose-logging
+
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist \
+            --dart-define=PRIVACY_POLICY_URL=$PRIVACY_POLICY_URL \
+            --dart-define=SUPPORT_EMAIL=$SUPPORT_EMAIL \
+            --dart-define=WEBSITE_URL=$WEBSITE_URL
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      email:
+        recipients:
+          - themuslimman77@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        expire_build_submitted_for_review: true

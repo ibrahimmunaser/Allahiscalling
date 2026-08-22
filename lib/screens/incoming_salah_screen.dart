@@ -223,23 +223,24 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = AppTheme.forPrayer(widget.prayer);
     return Scaffold(
-      backgroundColor: AppTheme.nightBlue,
+      backgroundColor: theme.gradientMid,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Deep vertical gradient, like a call screen at night.
-          const DecoratedBox(
+          // Prayer-specific atmosphere gradient.
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF061511),
-                  AppTheme.nightBlue,
-                  AppTheme.deepGreen,
+                  theme.gradientTop,
+                  theme.gradientMid,
+                  theme.gradientBottom,
                 ],
-                stops: [0.0, 0.45, 1.0],
+                stops: const [0.0, 0.45, 1.0],
               ),
             ),
           ),
@@ -253,7 +254,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    AppTheme.gold.withValues(alpha: 0.10),
+                    theme.accent.withValues(alpha: 0.12),
                     Colors.transparent,
                   ],
                 ),
@@ -272,7 +273,10 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                     animation: _rippleController,
                     builder:
                         (context, child) => CustomPaint(
-                          painter: _RipplePainter(_rippleController.value),
+                          painter: _RipplePainter(
+                            _rippleController.value,
+                            theme.accent,
+                          ),
                           child: child,
                         ),
                     child: Center(
@@ -281,12 +285,12 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                         height: 132,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [AppTheme.emerald, AppTheme.deepGreen],
+                            colors: [theme.primary, theme.deep],
                           ),
-                          border: Border.all(color: AppTheme.gold, width: 2),
+                          border: Border.all(color: theme.accent, width: 2),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.45),
@@ -295,10 +299,10 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.mosque_outlined,
                           size: 60,
-                          color: AppTheme.softGold,
+                          color: theme.softAccent,
                         ),
                       ),
                     ),
@@ -325,8 +329,8 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                 Text(
                   widget.prayer.displayName.toUpperCase(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppTheme.softGold,
+                  style: TextStyle(
+                    color: theme.softAccent,
                     fontSize: 36,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 3.5,
@@ -354,7 +358,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                     AppStrings.incomingSupportingLine(widget.prayer),
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppTheme.softGold.withValues(alpha: 0.90),
+                      color: theme.softAccent.withValues(alpha: 0.90),
                       fontSize: 17,
                       fontWeight: FontWeight.w400,
                       height: 1.4,
@@ -381,7 +385,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                       ),
                       _CallAction(
                         label: AppStrings.answer,
-                        labelColor: AppTheme.softGold,
+                        labelColor: theme.softAccent,
                         semanticLabel: 'Answer prayer reminder',
                         semanticHint: 'You are going to pray now',
                         onTap: _answer,
@@ -389,6 +393,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                           pulse: _pulseController,
                           shake: _shakeController,
                           onTap: _answer,
+                          theme: theme,
                         ),
                       ),
                     ],
@@ -502,11 +507,13 @@ class _AnswerButton extends StatelessWidget {
   final Animation<double> pulse;
   final Animation<double> shake;
   final VoidCallback onTap;
+  final PrayerPalette theme;
 
   const _AnswerButton({
     required this.pulse,
     required this.shake,
     required this.onTap,
+    required this.theme,
   });
 
   /// Short wiggle at the start of each cycle, then rest — like a ringing
@@ -531,7 +538,7 @@ class _AnswerButton extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.gold.withValues(alpha: 0.30 + 0.25 * p),
+                    color: theme.accent.withValues(alpha: 0.30 + 0.25 * p),
                     blurRadius: 22 + 16 * p,
                     spreadRadius: 2 + 5 * p,
                   ),
@@ -548,18 +555,18 @@ class _AnswerButton extends StatelessWidget {
         child: Ink(
           width: 90,
           height: 90,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFE3BE63), AppTheme.gold],
+              colors: [theme.softAccent, theme.accent],
             ),
           ),
           child: InkWell(
             onTap: onTap,
             customBorder: const CircleBorder(),
-            child: const Icon(Icons.call, size: 36, color: AppTheme.nightBlue),
+            child: Icon(Icons.call, size: 36, color: theme.onAccent),
           ),
         ),
       ),
@@ -571,8 +578,9 @@ class _AnswerButton extends StatelessWidget {
 /// language of a ringing call.
 class _RipplePainter extends CustomPainter {
   final double progress;
+  final Color accent;
 
-  _RipplePainter(this.progress);
+  _RipplePainter(this.progress, this.accent);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -588,12 +596,12 @@ class _RipplePainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.4
-          ..color = AppTheme.gold.withValues(alpha: opacity),
+          ..color = accent.withValues(alpha: opacity),
       );
     }
   }
 
   @override
   bool shouldRepaint(covariant _RipplePainter oldDelegate) =>
-      oldDelegate.progress != progress;
+      oldDelegate.progress != progress || oldDelegate.accent != accent;
 }

@@ -6,6 +6,9 @@ import '../utils/app_theme.dart';
 import '../utils/formatting.dart';
 
 /// Today's five prayer times, highlighting the upcoming one.
+///
+/// Each row uses that prayer's own palette so Fajr–Isha read as distinct
+/// atmospheres; the next prayer gets a stronger tint and border.
 class PrayerTimesList extends StatelessWidget {
   final PrayerDayTimes day;
   final SalahPrayer? highlighted;
@@ -17,20 +20,25 @@ class PrayerTimesList extends StatelessWidget {
     return Column(
       children:
           day.orderedEntries.map((entry) {
-            final isNext = entry.key == highlighted;
+            final prayer = entry.key;
+            final theme = AppTheme.forPrayer(prayer);
+            final isNext = prayer == highlighted;
             return Container(
               margin: const EdgeInsets.symmetric(vertical: 3),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color:
                     isNext
-                        ? AppTheme.emerald.withValues(alpha: 0.10)
-                        : Colors.transparent,
+                        ? theme.listTint.withValues(alpha: 0.12)
+                        : theme.listTint.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(12),
                 border:
                     isNext
-                        ? Border.all(color: AppTheme.gold, width: 1.2)
-                        : null,
+                        ? Border.all(color: theme.accent, width: 1.2)
+                        : Border.all(
+                          color: theme.listTint.withValues(alpha: 0.14),
+                          width: 1,
+                        ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -38,18 +46,21 @@ class PrayerTimesList extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        _iconFor(entry.key),
+                        _iconFor(prayer),
                         size: 20,
-                        color: isNext ? AppTheme.emerald : Colors.grey.shade600,
+                        color:
+                            isNext
+                                ? theme.primary
+                                : theme.primary.withValues(alpha: 0.72),
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        entry.key.displayName,
+                        prayer.displayName,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight:
                               isNext ? FontWeight.w700 : FontWeight.w500,
-                          color: isNext ? AppTheme.deepGreen : Colors.black87,
+                          color: isNext ? theme.deep : Colors.black87,
                         ),
                       ),
                     ],
@@ -59,7 +70,7 @@ class PrayerTimesList extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
-                      color: isNext ? AppTheme.deepGreen : Colors.black87,
+                      color: isNext ? theme.deep : Colors.black87,
                     ),
                   ),
                 ],
