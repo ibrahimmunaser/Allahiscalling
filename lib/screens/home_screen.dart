@@ -131,6 +131,33 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       await controller.markBatteryGuidanceShown();
     }
+
+    final needsAlarmKitGuidance = await controller.needsAlarmKitGuidance();
+    if (needsAlarmKitGuidance && mounted) {
+      final turnOn = await showDialog<bool>(
+        context: context,
+        builder:
+            (dialogContext) => AlertDialog(
+              title: const Text(AppStrings.alarmKitGuidanceTitle),
+              content: const Text(AppStrings.alarmKitGuidanceBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Not now'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Turn On'),
+                ),
+              ],
+            ),
+      );
+      if (turnOn == true) {
+        await controller.acceptAlarmKitGuidance();
+      } else {
+        await controller.dismissAlarmKitGuidance();
+      }
+    }
   }
 
   @override
@@ -172,6 +199,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     _HijriDateLine(controller: controller),
                     const SizedBox(height: 10),
+                    if (controller.shouldShowAlarmKitBanner) ...[
+                      _AlarmKitBanner(controller: controller),
+                      const SizedBox(height: 16),
+                    ],
                     _NextPrayerCard(controller: controller),
                     const SizedBox(height: 16),
                     if (controller.pendingCompletionPrayer != null) ...[
@@ -438,6 +469,94 @@ class _CompletionCard extends StatelessWidget {
             TextButton(
               onPressed: () => controller.markPrayerCompleted(prayer),
               child: const Text('Mark as Prayed'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Persistent (non-dismissible) nudge shown on Home while iOS AlarmKit
+/// ("Prayer Alarms") is available on this device but not yet authorized.
+/// Deliberately more prominent than a one-time dialog: this is the closest
+/// this app can get to a lock-screen call-style alert on iOS, and it is
+/// easy to miss or postpone forever if it only appears once at first launch.
+class _AlarmKitBanner extends StatelessWidget {
+  final AppController controller;
+
+  const _AlarmKitBanner({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final denied = controller.alarmKitAuthStatus == 'denied';
+    return Card(
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.orange.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.alarm_off_outlined, color: Colors.orange.shade800),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    denied
+                        ? AppStrings.alarmKitBannerTitleDenied
+                        : AppStrings.alarmKitBannerTitleOff,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    denied
+                        ? AppStrings.alarmKitBannerBodyDenied
+                        : AppStrings.alarmKitBannerBodyOff,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange.shade800,
+                      ),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        if (denied) {
+                          await controller.openAlarmKitSettings();
+                          return;
+                        }
+                        final status = await controller
+                            .requestAlarmKitPermission();
+                        if (!context.mounted) return;
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              status == 'authorized'
+                                  ? 'Prayer Alarms enabled.'
+                                  : 'Prayer Alarms not enabled.',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Text(denied ? 'Open Settings' : 'Enable'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

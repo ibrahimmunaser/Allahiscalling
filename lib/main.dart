@@ -90,6 +90,21 @@ Future<void> main() async {
   // on the simultaneously delivered notification). Only one may be shown.
   var incomingScreenOpen = false;
 
+  /// Cold-start notification taps often arrive while [navigatorKey] is still
+  /// null (plugin init can deliver the response before the first frame).
+  /// Wait briefly instead of silently dropping into home.
+  Future<NavigatorState?> waitForNavigator({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.mounted) return nav;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return navigatorKey.currentState;
+  }
+
   Future<void> presentIncomingScreen(
     SalahPrayer prayer, {
     DateTime? scheduledAt,
@@ -98,7 +113,15 @@ Future<void> main() async {
     if (incomingScreenOpen) return;
     incomingScreenOpen = true;
     try {
-      final result = await navigatorKey.currentState?.push<IncomingSalahResult>(
+      final nav = await waitForNavigator();
+      if (nav == null || !nav.mounted) {
+        debugPrint(
+          'Incoming salah screen skipped: navigator not ready '
+          '(prayer=${prayer.name})',
+        );
+        return;
+      }
+      final result = await nav.push<IncomingSalahResult>(
         MaterialPageRoute(
           builder:
               (_) => IncomingSalahScreen(

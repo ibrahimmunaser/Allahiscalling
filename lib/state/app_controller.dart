@@ -159,6 +159,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
     _settings = repository.loadSettings();
 
+    var handledNotificationOpen = false;
     notificationService.onNotificationTap = (payload, actionId) {
       // Defensive: "Decline" is normally handled in the background
       // isolate, but if the platform routes it here, snooze without any UI.
@@ -168,9 +169,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         if (prayer != null) snooze(prayer);
         return;
       }
+      handledNotificationOpen = true;
       onOpenReminder?.call(payload, actionId);
     };
     await notificationService.initialize();
+
+    // Capture cold-start launch details immediately after plugin init.
+    // Waiting until after location/reschedule can lose the response on iOS
+    // if the plugin already delivered it via onDidReceiveNotificationResponse,
+    // and delays presentation long enough that users only see Home.
+    final launch = await notificationService.getLaunchDetails();
+
     _notificationsPermitted = await notificationService.requestPermissions();
     _exactAlarmsAvailable = await notificationService.canScheduleExactAlarms();
 
@@ -206,13 +215,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
     await recalculateAndReschedule();
 
-    // If the app was launched from a notification, open the reminder screen.
-    final launch = await notificationService.getLaunchDetails();
-    if (launch != null) {
-      // Defer until the first frame so navigation is available.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        onOpenReminder?.call(launch.payload, launch.actionId);
-      });
+    // Cold-start from a notification tap. Skip if the plugin already
+    // delivered the same response through onDidReceiveNotificationResponse
+    // during initialize() (common on iOS).
+    if (launch != null && !handledNotificationOpen) {
+      onOpenReminder?.call(launch.payload, launch.actionId);
     }
 
     _scheduleMidnightRecalculation();
@@ -763,6 +770,40 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> dismissFullScreenGuidance() =>
       repository.setFlag(PrayerSettingsRepository.fullScreenGuidanceFlag);
+
+  /// Whether the one-time AlarmKit ("Prayer Alarms") onboarding dialog
+  /// should be shown. iOS 26+ only, and only before the user has ever been
+  /// asked — once they've made a real choice (authorized or denied) the
+  /// one-time dialog stays gone; [shouldShowAlarmKitBanner] takes over as
+  /// the ongoing (non-one-time) nudge until it's actually turned on.
+  Future<bool> needsAlarmKitGuidance() async {
+    if (kIsWeb || !Platform.isIOS) return false;
+    if (repository.flagSet(PrayerSettingsRepository.alarmKitGuidanceFlag)) {
+      return false;
+    }
+    return _alarmKitAvailable && _alarmKitAuthStatus == 'notDetermined';
+  }
+
+  /// User accepted the guidance: mark shown and request authorization.
+  Future<void> acceptAlarmKitGuidance() async {
+    await repository.setFlag(PrayerSettingsRepository.alarmKitGuidanceFlag);
+    await requestAlarmKitPermission();
+  }
+
+  Future<void> dismissAlarmKitGuidance() =>
+      repository.setFlag(PrayerSettingsRepository.alarmKitGuidanceFlag);
+
+  /// Whether the persistent "Prayer Alarms are off" banner should appear on
+  /// Home. Unlike the one-time dialog above, this is intentionally NOT
+  /// dismissible and keeps showing on every launch until AlarmKit is
+  /// actually authorized: a Time Sensitive banner alone is easy to miss for
+  /// something this important, and the whole point of AlarmKit here is to
+  /// make salah reminders impossible to sleep through.
+  bool get shouldShowAlarmKitBanner =>
+      !kIsWeb &&
+      Platform.isIOS &&
+      _alarmKitAvailable &&
+      _alarmKitAuthStatus != 'authorized';
 
   /// Returns the device manufacturer name if it is one of the aggressive
   /// battery-killer OEMs and the guidance has not been shown yet, else null.

@@ -116,6 +116,22 @@ class AppStrings {
       'To keep salah reminders reliable, allow background activity and '
       'disable battery restrictions for this app.';
 
+  // iOS AlarmKit (Prayer Alarms) guidance.
+  static const String alarmKitGuidanceTitle = 'Turn on Prayer Alarms';
+  static const String alarmKitGuidanceBody =
+      'iOS lets this app ring a system-level Prayer Alarm at salah time — '
+      'the strongest, most attention-getting alert this phone allows, even '
+      'when it\u2019s locked.\n\n'
+      'Without it, salah reminders still arrive, but only as a banner you '
+      'have to notice and tap yourself.';
+  static const String alarmKitBannerTitleOff = 'Prayer Alarms are off';
+  static const String alarmKitBannerBodyOff =
+      'Turn on Prayer Alarms so salah time rings through, even locked.';
+  static const String alarmKitBannerTitleDenied = 'Prayer Alarms are disabled';
+  static const String alarmKitBannerBodyDenied =
+      'Allow Prayer Alarms in Settings so salah time rings through, even '
+      'locked.';
+
   // Location onboarding.
   static const String useLocationPrompt =
       'Use current location for accurate salah times?';
