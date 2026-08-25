@@ -1,8 +1,8 @@
-# Allah Invites You to Salah
+# Allah Is Calling
 
 A Muslim prayer reminder app built with Flutter. When a prayer time enters, the
 user receives a platform-compliant, call-style reminder titled
-**"Allah Invites You to Salah"**. The incoming screen always presents exactly
+**"Allah Is Calling"**. The incoming screen always presents exactly
 two actions — **Answer** and **Decline** — creating a real, conscious decision
 at every prayer. Declining is respectful in behavior: it schedules the
 configured snooze. The app never uses "Call from Allah" or implies a literal

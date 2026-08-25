@@ -1,4 +1,4 @@
-# Release Checklist — Allah Invites You to Salah
+# Release Checklist — Allah Is Calling
 
 Nothing on this list is optional. Items marked **BLOCKER** will fail the
 build or the store review until resolved.

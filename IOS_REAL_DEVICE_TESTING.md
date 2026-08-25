@@ -35,7 +35,7 @@ Notifications capability.
 - [ ] Foreground: reminder appears at prayer time while the app is open
 - [ ] Background: reminder appears with the app backgrounded
 - [ ] Terminated: swipe the app away, wait for prayer time, reminder appears
-- [ ] Notification title is "Allah Invites You to Salah", body
+- [ ] Notification title is "Allah Is Calling", body
       "[Prayer] has entered"
 - [ ] Pending count stays ≤ 60 (debug screen → Pending count) after several
       reschedules

@@ -13,13 +13,13 @@ import '../models/salah_prayer.dart';
 class AppStrings {
   AppStrings._();
 
-  static const String appTitle = 'Allah Invites You to Salah';
+  static const String appTitle = 'Allah Is Calling';
 
   // Incoming call screen permanent title.
   static const String incomingCallTitle = 'Allah Is Calling';
 
   // Notification copy.
-  static const String notificationTitle = 'Allah Invites You to Salah';
+  static const String notificationTitle = 'Allah Is Calling';
 
   static String prayerEnteredBody(String prayerName) =>
       '$prayerName has entered';

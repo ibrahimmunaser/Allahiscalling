@@ -1,4 +1,4 @@
-# Beta Test Plan — Allah Invites You to Salah
+# Beta Test Plan — Allah Is Calling
 
 ## Goal
 

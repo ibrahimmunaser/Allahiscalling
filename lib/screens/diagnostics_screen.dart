@@ -38,7 +38,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final controller = context.read<AppController>();
     final lines = <String>[];
 
-    lines.add('=== Allah Invites You to Salah — diagnostics ===');
+    lines.add('=== Allah Is Calling — diagnostics ===');
     lines.add('Generated: ${DateTime.now().toIso8601String()}');
     lines.add('');
 

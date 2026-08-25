@@ -1,13 +1,13 @@
-# Play Store listing draft — Allah Invites You to Salah
+# Play Store listing draft — Allah Is Calling
 
 ## App name (30 chars max)
-Allah Invites You to Salah
+Allah Is Calling
 
 ## Short description (80 chars max)
 Prayer reminders that feel like an invitation. Answer when salah enters.
 
 ## Full description
-Allah Invites You to Salah turns each prayer time into a clear, conscious moment.
+Allah Is Calling turns each prayer time into a clear, conscious moment.
 
 When a prayer enters, you get a call-style reminder with two choices: Answer or Decline. The goal is simple — make salah feel personal, honorable, and hard to ignore, without guilt-heavy pressure.
 

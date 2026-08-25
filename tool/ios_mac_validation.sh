@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mac / Xcode validation script for Allah Invites You to Salah
+# Mac / Xcode validation script for Allah Is Calling
 # Run on a Mac with Xcode 26 SDK + Flutter stable matching the project.
 # Do NOT run on Windows. Do NOT silently ignore warnings.
 #
