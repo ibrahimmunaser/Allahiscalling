@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown by GuardBlockActivity for the brief moment before Flutter's
+     "Allah Is Calling" screen paints. Solid deep green (not the main app's
+     white/black splash) so a slow engine start never looks like a black
+     "broken" screen. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/guard_deep_green" />
+</layer-list>

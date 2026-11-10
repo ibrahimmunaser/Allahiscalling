@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,7 +18,42 @@ import 'utils/app_theme.dart';
 /// only on what the native side hands it over [_channel].
 @pragma('vm:entry-point')
 void guardMain() {
-  runApp(const GuardApp());
+  // Own Flutter engine (not the main app's) — bind before runApp so plugins
+  // / MethodChannel are ready the moment GuardBlockActivity attaches.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // This isolate has no crash reporting of its own, and a silent exception
+  // here previously meant the window just sat on its native splash forever
+  // — which looked like a plain black screen in dark mode. Catch anything
+  // that escapes the widget tree and at least log it; in release, also make
+  // build-time errors visible so a regression is never mistaken for "just
+  // black".
+  FlutterError.onError = (details) {
+    debugPrint('GuardApp FlutterError: ${details.exceptionAsString()}');
+    debugPrintStack(stackTrace: details.stack);
+  };
+  if (kReleaseMode) {
+    ErrorWidget.builder = (details) {
+      debugPrint('GuardApp ErrorWidget: ${details.exceptionAsString()}');
+      return Container(
+        color: AppTheme.deepGreen,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: const Text(
+          'Allah Is Calling\n(guard screen error — see logs)',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppTheme.ivory, fontSize: 16),
+        ),
+      );
+    };
+  }
+  runZonedGuarded(
+    () => runApp(const GuardApp()),
+    (error, stack) {
+      debugPrint('GuardApp uncaught zone error: $error');
+      debugPrintStack(stackTrace: stack);
+    },
+  );
 }
 
 const MethodChannel _channel = MethodChannel(
@@ -49,12 +86,24 @@ class GuardShieldScreen extends StatefulWidget {
 
 class _GuardShieldScreenState extends State<GuardShieldScreen> {
   SalahPrayer? _prayer;
+  /// Shown under "Allah Is Calling" — a real prayer name, or a neutral
+  /// "Prayer" label when the native side passed a non-prayer string (e.g.
+  /// the "Test" demo window).
+  String _prayerLabel = 'Prayer';
   String _blockedAppLabel = 'This app';
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: AppTheme.deepGreen,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
     _channel.setMethodCallHandler(_handleCall);
     _loadConfig();
   }
@@ -79,8 +128,13 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
 
   void _applyConfig(Map<dynamic, dynamic>? data) {
     if (!mounted) return;
+    final raw = (data?['prayer'] as String?)?.trim() ?? '';
+    final parsed = SalahPrayer.fromName(raw);
     setState(() {
-      _prayer = SalahPrayer.fromName(data?['prayer'] as String? ?? '');
+      _prayer = parsed;
+      // Never show "Test" (or any other non-prayer tag) as the big prayer
+      // name — fall back to a calm generic label for demo / unknown windows.
+      _prayerLabel = parsed?.displayName ?? 'Prayer';
       _blockedAppLabel =
           (data?['blockedAppLabel'] as String?) ??
           (data?['blockedPackage'] as String?) ??
@@ -103,21 +157,31 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
     } catch (_) {}
   }
 
+  /// Palette for the known prayer, or the brand deep-green look when the
+  /// window isn't tied to a specific salah (demo / unknown).
+  PrayerPalette get _theme {
+    final prayer = _prayer;
+    if (prayer != null) return AppTheme.forPrayer(prayer);
+    return const PrayerPalette(
+      primary: AppTheme.emerald,
+      deep: AppTheme.deepGreen,
+      accent: AppTheme.gold,
+      softAccent: AppTheme.softGold,
+      gradientTop: AppTheme.nightBlue,
+      gradientMid: AppTheme.deepGreen,
+      gradientBottom: AppTheme.emerald,
+      onAccent: AppTheme.deepGreen,
+      listTint: AppTheme.emerald,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        backgroundColor: AppTheme.deepGreen,
-        body: Center(
-          child: CircularProgressIndicator(color: AppTheme.softGold),
-        ),
-      );
-    }
-    final prayer = _prayer ?? SalahPrayer.dhuhr;
-    final theme = AppTheme.forPrayer(prayer);
+    final theme = _theme;
+    // Even while config is still loading, paint the real call UI shell so
+    // the user never sits on a blank/spinner-only screen — Answer/Decline
+    // stay disabled until we know which app we're covering.
     return PopScope(
-      // Mirrors the main app's incoming-call screen: only Answer/Decline
-      // may leave this screen.
       canPop: false,
       child: Scaffold(
         backgroundColor: theme.gradientMid,
@@ -129,7 +193,11 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [theme.gradientTop, theme.gradientMid, theme.gradientBottom],
+                  colors: [
+                    theme.gradientTop,
+                    theme.gradientMid,
+                    theme.gradientBottom,
+                  ],
                   stops: const [0.0, 0.45, 1.0],
                 ),
               ),
@@ -156,7 +224,7 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
                   ),
                   const SizedBox(height: 22),
                   Text(
-                    prayer.displayName.toUpperCase(),
+                    _prayerLabel.toUpperCase(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: theme.softAccent,
@@ -170,8 +238,10 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
-                      '$_blockedAppLabel will stay closed until you answer '
-                      'or decline.',
+                      _loading
+                          ? 'Preparing your reminder…'
+                          : '$_blockedAppLabel will stay closed until you '
+                              'answer or decline.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppTheme.ivory.withValues(alpha: 0.88),
@@ -192,14 +262,19 @@ class _GuardShieldScreenState extends State<GuardShieldScreen> {
                         _GuardAction(
                           label: 'Decline',
                           labelColor: Colors.red.shade300,
-                          onTap: _decline,
-                          child: _DeclineCircle(onTap: _decline),
+                          onTap: _loading ? () {} : _decline,
+                          child: _DeclineCircle(
+                            onTap: _loading ? () {} : _decline,
+                          ),
                         ),
                         _GuardAction(
                           label: 'Answer',
                           labelColor: theme.softAccent,
-                          onTap: _answer,
-                          child: _AnswerCircle(onTap: _answer, theme: theme),
+                          onTap: _loading ? () {} : _answer,
+                          child: _AnswerCircle(
+                            onTap: _loading ? () {} : _answer,
+                            theme: theme,
+                          ),
                         ),
                       ],
                     ),

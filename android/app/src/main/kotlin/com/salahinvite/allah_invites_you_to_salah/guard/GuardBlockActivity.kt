@@ -59,10 +59,15 @@ class GuardBlockActivity : FlutterActivity() {
                     }
                 )
                 FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 // Best-effort only: GuardBlockActivity falls back to creating
                 // its own engine on demand (see getCachedEngineId/
-                // getDartEntrypointFunctionName below) if this failed.
+                // getDartEntrypointFunctionName below) if this failed — but
+                // log it, since a silently-failing prewarm here previously
+                // made a slow/cold engine start (which can look like a black
+                // screen for a couple of seconds) indistinguishable from a
+                // real bug.
+                android.util.Log.e("AppGuard", "prewarm failed", e)
             }
         }
     }

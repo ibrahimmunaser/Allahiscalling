@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0E3B2E</color>
+    <!-- Matches AppTheme.deepGreen — used as the GuardBlockActivity window
+         background so the user never sees a blank/black splash while the
+         Flutter guard engine is still painting its first frame. -->
+    <color name="guard_deep_green">#FF0E3B2E</color>
+    <color name="guard_soft_gold">#FFE5D3A1</color>
 </resources>
