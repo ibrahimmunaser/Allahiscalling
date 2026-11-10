@@ -3,9 +3,13 @@ package com.salahinvite.allah_invites_you_to_salah.guard
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.TextView
@@ -22,12 +26,19 @@ import java.util.concurrent.TimeUnit
  * started from the foreground service previously painted only the window
  * background (solid green) and never the Dart UI on some devices — so this
  * screen is XML + Activity for reliability.
+ *
+ * Answer / Decline stay locked until five ring vibrates finish, so the user
+ * has to sit with the call before choosing.
  */
 class GuardBlockActivity : Activity() {
     companion object {
         const val EXTRA_PRAYER = "prayer"
         const val EXTRA_BLOCKED_PACKAGE = "blocked_package"
         const val EXTRA_END_AT = "end_at_millis"
+
+        private const val REQUIRED_RING_VIBRATES = 5
+        private const val RING_BUZZ_MS = 420L
+        private const val RING_GAP_MS = 780L
 
         fun start(
             context: Context,
@@ -67,7 +78,14 @@ class GuardBlockActivity : Activity() {
     private var endAtMillis: Long = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var countdownRunnable: Runnable? = null
+    private var ringRunnable: Runnable? = null
+    private var ringsCompleted = 0
+    private var actionsUnlocked = false
+
     private lateinit var countdownView: TextView
+    private lateinit var actionsHint: TextView
+    private lateinit var declineButton: ImageButton
+    private lateinit var answerButton: ImageButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,20 +98,29 @@ class GuardBlockActivity : Activity() {
         )
         setContentView(R.layout.activity_guard_block)
 
-        bindFromIntent(intent)
+        countdownView = findViewById(R.id.guard_countdown)
+        actionsHint = findViewById(R.id.guard_actions_hint)
+        declineButton = findViewById(R.id.guard_decline)
+        answerButton = findViewById(R.id.guard_answer)
 
-        findViewById<ImageButton>(R.id.guard_decline).setOnClickListener {
+        // Rotate the decline icon 135° so it reads as "hang up" rather than
+        // a normal call icon (same glyph as Answer).
+        declineButton.rotation = 135f
+
+        declineButton.setOnClickListener {
+            if (!actionsUnlocked) return@setOnClickListener
             AppGuardForegroundService.exemptPackageForCurrentWindow(blockedPackage)
             finishAndRemoveTask()
         }
-        findViewById<ImageButton>(R.id.guard_answer).setOnClickListener {
+        answerButton.setOnClickListener {
+            if (!actionsUnlocked) return@setOnClickListener
             goHome()
             finishAndRemoveTask()
         }
 
-        // Rotate the decline icon 135° so it reads as "hang up" rather than
-        // a normal call icon (same glyph as Answer).
-        findViewById<ImageButton>(R.id.guard_decline).rotation = 135f
+        bindFromIntent(intent)
+        lockActionsUntilRings()
+        startRingVibrates()
     }
 
     private fun bindFromIntent(intent: Intent) {
@@ -112,8 +139,76 @@ class GuardBlockActivity : Activity() {
         findViewById<TextView>(R.id.guard_headline).text =
             "Your apps have been blocked.\nGet up and pray."
         findViewById<TextView>(R.id.guard_unlock_label).text = "Your apps unlock in"
-        countdownView = findViewById(R.id.guard_countdown)
         startCountdown()
+    }
+
+    private fun lockActionsUntilRings() {
+        actionsUnlocked = false
+        ringsCompleted = 0
+        declineButton.isEnabled = false
+        answerButton.isEnabled = false
+        declineButton.alpha = 0.35f
+        answerButton.alpha = 0.35f
+        updateRingHint()
+    }
+
+    private fun unlockActions() {
+        actionsUnlocked = true
+        declineButton.isEnabled = true
+        answerButton.isEnabled = true
+        declineButton.alpha = 1f
+        answerButton.alpha = 1f
+        actionsHint.text = "Answer to go pray — or Decline to keep this app for now"
+    }
+
+    private fun updateRingHint() {
+        actionsHint.text =
+            "Feel the call — $ringsCompleted / $REQUIRED_RING_VIBRATES before you can choose"
+    }
+
+    private fun startRingVibrates() {
+        ringRunnable?.let { handler.removeCallbacks(it) }
+        val tick = object : Runnable {
+            override fun run() {
+                if (isFinishing) return
+                vibrateOnce()
+                ringsCompleted += 1
+                updateRingHint()
+                if (ringsCompleted >= REQUIRED_RING_VIBRATES) {
+                    unlockActions()
+                    return
+                }
+                handler.postDelayed(this, RING_BUZZ_MS + RING_GAP_MS)
+            }
+        }
+        ringRunnable = tick
+        // First buzz right away so the screen feels like an incoming call.
+        tick.run()
+    }
+
+    private fun vibrateOnce() {
+        val vibrator = vibratorOrNull() ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    RING_BUZZ_MS,
+                    VibrationEffect.DEFAULT_AMPLITUDE,
+                ),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(RING_BUZZ_MS)
+        }
+    }
+
+    private fun vibratorOrNull(): Vibrator? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = getSystemService(VibratorManager::class.java) ?: return null
+            manager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as? Vibrator
+        }
     }
 
     private fun startCountdown() {
@@ -151,11 +246,18 @@ class GuardBlockActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         bindFromIntent(intent)
+        // Fresh blocked-app launch: reset the five-ring gate.
+        ringRunnable?.let { handler.removeCallbacks(it) }
+        lockActionsUntilRings()
+        startRingVibrates()
     }
 
     override fun onDestroy() {
+        ringRunnable?.let { handler.removeCallbacks(it) }
+        ringRunnable = null
         countdownRunnable?.let { handler.removeCallbacks(it) }
         countdownRunnable = null
+        vibratorOrNull()?.cancel()
         super.onDestroy()
     }
 }

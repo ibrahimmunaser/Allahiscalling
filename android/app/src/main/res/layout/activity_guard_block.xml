@@ -102,6 +102,16 @@
             android:layout_height="0dp"
             android:layout_weight="1.4" />
 
+        <TextView
+            android:id="@+id/guard_actions_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            android:gravity="center"
+            android:text="Feel the call — Answer &amp; Decline unlock after 5 rings"
+            android:textColor="@color/guard_ivory_dim"
+            android:textSize="14sp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
