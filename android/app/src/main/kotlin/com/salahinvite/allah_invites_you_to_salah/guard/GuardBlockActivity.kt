@@ -3,13 +3,16 @@ package com.salahinvite.allah_invites_you_to_salah.guard
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.TextView
@@ -37,8 +40,9 @@ class GuardBlockActivity : Activity() {
         const val EXTRA_END_AT = "end_at_millis"
 
         private const val REQUIRED_RING_VIBRATES = 5
-        private const val RING_BUZZ_MS = 420L
-        private const val RING_GAP_MS = 780L
+        /** One double-buzz "ring" (on-off-on), then a pause before the next. */
+        private const val RING_PATTERN_MS = 680L
+        private const val RING_GAP_MS = 700L
 
         fun start(
             context: Context,
@@ -81,6 +85,7 @@ class GuardBlockActivity : Activity() {
     private var ringRunnable: Runnable? = null
     private var ringsCompleted = 0
     private var actionsUnlocked = false
+    private var ringsStarted = false
 
     private lateinit var countdownView: TextView
     private lateinit var actionsHint: TextView
@@ -120,7 +125,16 @@ class GuardBlockActivity : Activity() {
 
         bindFromIntent(intent)
         lockActionsUntilRings()
-        startRingVibrates()
+        // Vibration starts in onResume once the window is focused — buzzing
+        // from onCreate was a silent no-op on several OEM builds.
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!ringsStarted && !actionsUnlocked) {
+            ringsStarted = true
+            startRingVibrates()
+        }
     }
 
     private fun bindFromIntent(intent: Intent) {
@@ -145,6 +159,7 @@ class GuardBlockActivity : Activity() {
     private fun lockActionsUntilRings() {
         actionsUnlocked = false
         ringsCompleted = 0
+        ringsStarted = false
         declineButton.isEnabled = false
         answerButton.isEnabled = false
         declineButton.alpha = 0.35f
@@ -178,26 +193,59 @@ class GuardBlockActivity : Activity() {
                     unlockActions()
                     return
                 }
-                handler.postDelayed(this, RING_BUZZ_MS + RING_GAP_MS)
+                handler.postDelayed(this, RING_PATTERN_MS + RING_GAP_MS)
             }
         }
         ringRunnable = tick
-        // First buzz right away so the screen feels like an incoming call.
         tick.run()
     }
 
+    /**
+     * Phone-style double buzz tagged as a ringtone/alarm so OEMs don't
+     * swallow a plain one-shot (common when launched over another app).
+     * Also fires a view haptic as a second path.
+     */
     private fun vibrateOnce() {
+        @Suppress("DEPRECATION")
+        window.decorView.performHapticFeedback(
+            HapticFeedbackConstants.LONG_PRESS,
+            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING or
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+        )
+
         val vibrator = vibratorOrNull() ?: return
+        if (!vibrator.hasVibrator()) return
+
+        // Double pulse: buzz — gap — buzz (like a ringing phone).
+        val timings = longArrayOf(0, 280, 120, 280)
+        val amplitudes = intArrayOf(0, 255, 0, 255)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(
-                VibrationEffect.createOneShot(
-                    RING_BUZZ_MS,
-                    VibrationEffect.DEFAULT_AMPLITUDE,
-                ),
-            )
+            val effect = if (vibrator.hasAmplitudeControl()) {
+                VibrationEffect.createWaveform(timings, amplitudes, -1)
+            } else {
+                VibrationEffect.createWaveform(timings, -1)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                vibrator.vibrate(
+                    effect,
+                    VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_RINGTONE)
+                        .build(),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(
+                    effect,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+            }
         } else {
             @Suppress("DEPRECATION")
-            vibrator.vibrate(RING_BUZZ_MS)
+            vibrator.vibrate(timings, -1)
         }
     }
 
@@ -249,6 +297,7 @@ class GuardBlockActivity : Activity() {
         // Fresh blocked-app launch: reset the five-ring gate.
         ringRunnable?.let { handler.removeCallbacks(it) }
         lockActionsUntilRings()
+        ringsStarted = true
         startRingVibrates()
     }
 
