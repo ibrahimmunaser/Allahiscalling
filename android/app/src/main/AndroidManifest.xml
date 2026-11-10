@@ -100,6 +100,9 @@
              enters. Own task, excluded from recents, no OS animation delay
              expected from the user since it is launched the instant the
              guarded app is detected in the foreground. -->
+        <!-- Native (non-Flutter) block screen — a second Flutter engine
+             started from the guard foreground service was painting only the
+             green window background and never the Dart UI on device. -->
         <activity
             android:name=".guard.GuardBlockActivity"
             android:exported="false"
@@ -110,16 +113,7 @@
             android:turnScreenOn="true"
             android:theme="@style/GuardLaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true">
-            <!-- GuardNormalTheme keeps the window deep green (matching the
-                 Flutter "Allah Is Calling" screen) once Flutter paints —
-                 without this meta-data the activity was stuck on the splash
-                 theme, which looked like a plain black screen in dark mode. -->
-            <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/GuardNormalTheme"
-              />
-        </activity>
+            android:hardwareAccelerated="true"/>
 
         <!-- Foreground service that watches for guarded apps coming to the
              foreground during a prayer's 15-minute guard window. -->

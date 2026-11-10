@@ -189,7 +189,21 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     _rippleController.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    // Restore the normal chrome. Prefer showing all overlays explicitly —
+    // SystemUiMode.edgeToEdge alone was leaving Settings with unstable
+    // inset/layout behavior (visible scroll jank after Preview reminder).
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+    );
     // Restore all orientations when leaving the call screen.
     SystemChrome.setPreferredOrientations([]);
     super.dispose();

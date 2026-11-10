@@ -31,8 +31,21 @@ String _alarmKitSubtitle(AppController controller) {
   }
 }
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +55,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
           _SectionHeader('Location'),
@@ -762,12 +776,15 @@ class _AppGuardSectionState extends State<_AppGuardSection>
     final controller = context.read<AppController>();
     final usage = await controller.guardHasUsageAccess();
     final overlay = await controller.guardHasOverlayPermission();
-    if (mounted) {
-      setState(() {
-        _hasUsageAccess = usage;
-        _hasOverlayPermission = overlay;
-      });
-    }
+    if (!mounted) return;
+    // Skip setState when nothing changed — a no-op refresh during an
+    // active scroll was still rebuilding this section (and shifting the
+    // surrounding ListView) and contributed to the Settings scroll jank.
+    if (_hasUsageAccess == usage && _hasOverlayPermission == overlay) return;
+    setState(() {
+      _hasUsageAccess = usage;
+      _hasOverlayPermission = overlay;
+    });
   }
 
   @override

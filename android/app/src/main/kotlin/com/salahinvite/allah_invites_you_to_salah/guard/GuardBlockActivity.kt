@@ -1,32 +1,28 @@
 package com.salahinvite.allah_invites_you_to_salah.guard
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.FlutterInjector
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.FlutterEngineCache
-import io.flutter.embedding.engine.dart.DartExecutor
-import io.flutter.plugin.common.MethodChannel
+import android.view.WindowManager
+import android.widget.ImageButton
+import android.widget.TextView
+import com.salahinvite.allah_invites_you_to_salah.R
 
 /**
  * Full-screen "Allah is calling" guard screen, launched by
  * [AppGuardForegroundService] over a guarded app opened during the
  * 15-minute window after a prayer enters.
  *
- * Runs its OWN Flutter engine (entrypoint `guardMain`, see
- * `lib/guard_main.dart`) — not the app's main engine — so it never depends
- * on the main app having been launched, and stays fast by reusing a
- * pre-warmed cached engine when [AppGuardForegroundService] had time to
- * prepare one.
+ * Native Android layout (not a Flutter Activity). A second Flutter engine
+ * started from the foreground service previously painted only the window
+ * background (solid green) and never the Dart UI on some devices — so this
+ * screen is XML + Activity for reliability.
  */
-class GuardBlockActivity : FlutterActivity() {
+class GuardBlockActivity : Activity() {
     companion object {
-        const val ENGINE_ID = "guard_engine"
         const val EXTRA_PRAYER = "prayer"
         const val EXTRA_BLOCKED_PACKAGE = "blocked_package"
-        const val CHANNEL = "com.salahinvite.allah_invites_you_to_salah/app_guard_screen"
 
         fun start(context: Context, prayer: String, blockedPackage: String) {
             val intent = Intent(context, GuardBlockActivity::class.java).apply {
@@ -40,51 +36,29 @@ class GuardBlockActivity : FlutterActivity() {
         }
 
         /**
-         * Pre-warms the guard Flutter engine so [start] above is fast when a
-         * guarded app is actually detected. Safe to call repeatedly — it is
-         * a no-op once the engine is already cached.
+         * Kept as a no-op so the foreground service can still call it after
+         * the Flutter-engine prewarm was removed. Harmless.
          */
-        fun prewarm(context: Context) {
-            if (FlutterEngineCache.getInstance().get(ENGINE_ID) != null) return
-            try {
-                val loader = FlutterInjector.instance().flutterLoader()
-                if (!loader.initialized()) {
-                    loader.startInitialization(context.applicationContext)
-                    loader.ensureInitializationComplete(context.applicationContext, null)
-                }
-                val engine = FlutterEngine(context.applicationContext)
-                engine.dartExecutor.executeDartEntrypoint(
-                    DartExecutor.DartEntrypoint.createDefault().let {
-                        DartExecutor.DartEntrypoint(it.pathToBundle, "guardMain")
-                    }
-                )
-                FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
-            } catch (e: Exception) {
-                // Best-effort only: GuardBlockActivity falls back to creating
-                // its own engine on demand (see getCachedEngineId/
-                // getDartEntrypointFunctionName below) if this failed — but
-                // log it, since a silently-failing prewarm here previously
-                // made a slow/cold engine start (which can look like a black
-                // screen for a couple of seconds) indistinguishable from a
-                // real bug.
-                android.util.Log.e("AppGuard", "prewarm failed", e)
-            }
+        fun prewarm(@Suppress("UNUSED_PARAMETER") context: Context) {
+            // No Flutter engine to warm anymore.
         }
     }
 
-    private var methodChannel: MethodChannel? = null
+    private var blockedPackage: String = ""
 
-    // Only reuse the cache if it is actually warm; otherwise fall back to a
-    // fresh engine using the same entrypoint (see getDartEntrypointFunctionName).
-    override fun getCachedEngineId(): String? =
-        if (FlutterEngineCache.getInstance().get(ENGINE_ID) != null) ENGINE_ID else null
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Keep visible over lock screen / while screen is off briefly.
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+        )
+        setContentView(R.layout.activity_guard_block)
 
-    override fun getDartEntrypointFunctionName(): String = "guardMain"
-
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        val prayer = intent.getStringExtra(EXTRA_PRAYER) ?: "Prayer"
-        val blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE) ?: ""
+        val prayerRaw = intent.getStringExtra(EXTRA_PRAYER)?.trim().orEmpty()
+        blockedPackage = intent.getStringExtra(EXTRA_BLOCKED_PACKAGE).orEmpty()
         val blockedAppLabel = try {
             val pm = packageManager
             pm.getApplicationLabel(pm.getApplicationInfo(blockedPackage, 0)).toString()
@@ -92,40 +66,29 @@ class GuardBlockActivity : FlutterActivity() {
             "This app"
         }
 
-        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-        methodChannel = channel
-        channel.setMethodCallHandler { call, result ->
-            when (call.method) {
-                "getConfig" -> result.success(
-                    mapOf(
-                        "prayer" to prayer,
-                        "blockedPackage" to blockedPackage,
-                        "blockedAppLabel" to blockedAppLabel,
-                    )
-                )
-                "answer" -> {
-                    goHome()
-                    finishAndRemoveTask()
-                    result.success(null)
-                }
-                "decline" -> {
-                    AppGuardForegroundService.exemptPackageForCurrentWindow(blockedPackage)
-                    finishAndRemoveTask()
-                    result.success(null)
-                }
-                else -> result.notImplemented()
-            }
+        // Demo windows pass "Test" — show a neutral label instead.
+        val prayerLabel = when {
+            prayerRaw.isEmpty() -> "Prayer"
+            prayerRaw.equals("Test", ignoreCase = true) -> "Prayer"
+            else -> prayerRaw
         }
-        // Tell the already-running cached engine which prayer/app to show —
-        // its UI may already be built from a previous window.
-        channel.invokeMethod(
-            "configure",
-            mapOf(
-                "prayer" to prayer,
-                "blockedPackage" to blockedPackage,
-                "blockedAppLabel" to blockedAppLabel,
-            ),
-        )
+
+        findViewById<TextView>(R.id.guard_prayer_name).text = prayerLabel.uppercase()
+        findViewById<TextView>(R.id.guard_subtitle).text =
+            "$blockedAppLabel will stay closed until you answer or decline."
+
+        findViewById<ImageButton>(R.id.guard_decline).setOnClickListener {
+            AppGuardForegroundService.exemptPackageForCurrentWindow(blockedPackage)
+            finishAndRemoveTask()
+        }
+        findViewById<ImageButton>(R.id.guard_answer).setOnClickListener {
+            goHome()
+            finishAndRemoveTask()
+        }
+
+        // Rotate the decline icon 135° so it reads as "hang up" rather than
+        // a normal call icon (same glyph as Answer).
+        findViewById<ImageButton>(R.id.guard_decline).rotation = 135f
     }
 
     private fun goHome() {
@@ -136,14 +99,16 @@ class GuardBlockActivity : FlutterActivity() {
         startActivity(home)
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        // Never allow backing out into the guarded app without a choice —
-        // mirrors the main app's incoming-call screen, which only exits via
-        // Answer/Decline.
+        // Never allow backing out into the guarded app without a choice.
     }
 
-    override fun onDestroy() {
-        methodChannel?.setMethodCallHandler(null)
-        super.onDestroy()
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Re-bind labels if the service relaunches us for a different app
+        // during the same window.
+        recreate()
     }
 }
