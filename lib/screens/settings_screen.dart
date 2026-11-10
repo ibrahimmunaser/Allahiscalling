@@ -10,6 +10,7 @@ import '../utils/app_strings.dart';
 import '../utils/app_theme.dart';
 import '../utils/formatting.dart';
 import '../widgets/location_feedback.dart';
+import 'app_guard_screen.dart';
 import 'diagnostics_screen.dart';
 import 'incoming_salah_screen.dart';
 import 'manual_location_screen.dart';
@@ -357,6 +358,10 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (controller.guardSupported) ...[
+            const _AppGuardSection(),
+            const SizedBox(height: 16),
+          ],
           _SectionHeader('Display'),
           Card(
             child: ListTile(
@@ -697,6 +702,137 @@ class _VersionTileState extends State<_VersionTile> {
       title: const Text(AppStrings.appTitle),
       subtitle: Text(_version),
     );
+  }
+}
+
+/// "Guard apps during prayer time" — when on, any app the user chose shows
+/// the "Allah is calling" screen (Answer/Decline) every time they open it,
+/// for the 15 minutes after a prayer enters. Android only.
+class _AppGuardSection extends StatefulWidget {
+  const _AppGuardSection();
+
+  @override
+  State<_AppGuardSection> createState() => _AppGuardSectionState();
+}
+
+class _AppGuardSectionState extends State<_AppGuardSection> {
+  bool? _hasPermissions;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPermissions();
+  }
+
+  Future<void> _refreshPermissions() async {
+    final hasAll = await context.read<AppController>().guardHasAllPermissions();
+    if (mounted) setState(() => _hasPermissions = hasAll);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<AppController>();
+    final enabled = controller.guardEnabled;
+    final guardedCount = controller.guardedPackages.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader('Guard apps during prayer time'),
+        Card(
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  'For the 15 minutes after each prayer enters, apps you '
+                  'choose will show "Allah Is Calling" with Answer and '
+                  'Decline every time you open them.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('Guard apps'),
+                subtitle: Text(
+                  guardedCount == 0
+                      ? 'No apps chosen yet'
+                      : '$guardedCount app${guardedCount == 1 ? '' : 's'} guarded',
+                ),
+                value: enabled,
+                onChanged: (v) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  if (v && _hasPermissions != true) {
+                    await _promptPermissions(context);
+                    await _refreshPermissions();
+                    if (_hasPermissions != true) {
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Grant both permissions to turn on App Guard.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+                  await controller.setGuardEnabled(v);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.apps_outlined),
+                title: const Text('Choose apps to guard'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AppGuardScreen()),
+                    ),
+              ),
+              if (_hasPermissions == false) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.warning_amber_outlined, color: Colors.orange),
+                  title: const Text('Permissions needed'),
+                  subtitle: const Text('Usage access and "Display over other apps"'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _promptPermissions(context),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _promptPermissions(BuildContext context) async {
+    final controller = context.read<AppController>();
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Two permissions needed'),
+            content: const Text(
+              'App Guard needs "Usage access" (to see which app is open) '
+              'and "Display over other apps" (to show the guard screen on '
+              'top of it). Android will open each settings page in turn — '
+              'find this app and turn the permission on, then come back.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+    );
+    if (proceed != true) return;
+    await controller.requestGuardUsageAccess();
+    await controller.requestGuardOverlayPermission();
   }
 }
 

@@ -13,6 +13,7 @@ import '../models/prayer_settings.dart';
 import '../models/salah_prayer.dart';
 import '../models/scheduled_reminder.dart';
 import '../repositories/prayer_settings_repository.dart';
+import '../services/app_guard_service.dart';
 import '../services/city_database.dart';
 import '../services/decline_flow.dart';
 import '../services/diagnostics_log.dart';
@@ -48,6 +49,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// iOS 26+ AlarmKit bridge. Null on Android / when unused.
   final IosAlarmKitService? alarmKitService;
+
+  /// Android-only App Guard bridge (no-op elsewhere — see AppGuardService).
+  final AppGuardService appGuardService;
 
   /// Set by the app shell so notification taps can navigate.
   /// [actionId] is the notification action that was tapped (e.g. "Pray Now"),
@@ -100,7 +104,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     required this.geocodingService,
     NotificationScheduler? notificationScheduler,
     this.alarmKitService,
-  }) : notificationScheduler = notificationScheduler ?? notificationService;
+    AppGuardService? appGuardService,
+  }) : notificationScheduler = notificationScheduler ?? notificationService,
+       appGuardService = appGuardService ?? AppGuardService();
 
   PrayerSettings get settings => _settings;
   PrayerDayTimes? get today => _today;
@@ -214,6 +220,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     await recalculateAndReschedule();
+
+    // Re-mirror the persisted guard selection to the native side on every
+    // launch — cheap, and guards against the native-only prefs file ever
+    // drifting from what Settings shows (e.g. after a backup restore that
+    // only restored the Dart-side SharedPreferences file).
+    if (appGuardService.isSupported) {
+      unawaited(appGuardService.setGuardEnabled(repository.guardEnabled));
+      unawaited(appGuardService.setGuardedPackages(repository.guardedPackages));
+    }
 
     // Cold-start from a notification tap. Skip if the plugin already
     // delivered the same response through onDidReceiveNotificationResponse
@@ -832,6 +847,46 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> markBatteryGuidanceShown() =>
       repository.setFlag(PrayerSettingsRepository.batteryGuidanceFlag);
+
+  // -------------------------------------------------------------- app guard
+
+  /// Whether App Guard is supported on this platform at all (Android only).
+  bool get guardSupported => appGuardService.isSupported;
+
+  bool get guardEnabled => repository.guardEnabled;
+
+  List<String> get guardedPackages => repository.guardedPackages;
+
+  /// Both special permissions the guard feature needs. False (not an error)
+  /// on unsupported platforms.
+  Future<bool> guardHasAllPermissions() => appGuardService.hasAllPermissions();
+
+  Future<void> requestGuardUsageAccess() =>
+      appGuardService.requestUsageAccess();
+
+  Future<void> requestGuardOverlayPermission() =>
+      appGuardService.requestOverlayPermission();
+
+  Future<List<GuardableApp>> guardableApps() =>
+      appGuardService.getInstalledApps();
+
+  /// Turning the feature on/off only ever changes whether a FUTURE guard
+  /// window (armed the next time a primary prayer reminder is scheduled —
+  /// i.e. after the next [recalculateAndReschedule]) actually shows the
+  /// block screen; the native side re-checks [GuardPrefs.isEnabled] at the
+  /// moment each window fires, so toggling this also takes effect for any
+  /// window already scheduled for later today.
+  Future<void> setGuardEnabled(bool enabled) async {
+    await repository.saveGuardEnabled(enabled);
+    await appGuardService.setGuardEnabled(enabled);
+    notifyListeners();
+  }
+
+  Future<void> setGuardedPackages(List<String> packages) async {
+    await repository.saveGuardedPackages(packages);
+    await appGuardService.setGuardedPackages(packages);
+    notifyListeners();
+  }
 
   @override
   void dispose() {

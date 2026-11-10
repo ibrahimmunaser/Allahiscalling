@@ -24,6 +24,16 @@ class PrayerSettingsRepository {
   static const _completionsKey = 'prayer_completions_v1';
   static const _answersKey = 'prayer_answers_v1';
 
+  /// App Guard (Android): whether guarded apps should be covered with the
+  /// "Allah is calling" screen during each prayer's 15-minute window, and
+  /// which app packages were chosen. Mirrored to the native-only prefs file
+  /// the foreground service reads (see AppGuardService) whenever changed —
+  /// these Dart-side keys exist purely so Settings can display/edit the
+  /// current selection without a platform-channel round trip on every
+  /// rebuild.
+  static const _guardEnabledKey = 'app_guard_enabled_v1';
+  static const _guardedPackagesKey = 'app_guard_packages_v1';
+
   /// One-time UX flags.
   static const fullScreenGuidanceFlag = 'fsi_guidance_shown_v1';
   static const batteryGuidanceFlag = 'oem_battery_guidance_shown_v1';
@@ -223,6 +233,28 @@ class PrayerSettingsRepository {
     } catch (_) {
       return {};
     }
+  }
+
+  // ------------------------------------------------------------ app guard
+
+  bool get guardEnabled => _prefs.getBool(_guardEnabledKey) ?? false;
+
+  Future<void> saveGuardEnabled(bool enabled) async {
+    await _prefs.setBool(_guardEnabledKey, enabled);
+  }
+
+  List<String> get guardedPackages {
+    final raw = _prefs.getString(_guardedPackagesKey);
+    if (raw == null) return [];
+    try {
+      return (jsonDecode(raw) as List<dynamic>).cast<String>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveGuardedPackages(List<String> packages) async {
+    await _prefs.setString(_guardedPackagesKey, jsonEncode(packages));
   }
 
   static String _dateKey(DateTime date) =>

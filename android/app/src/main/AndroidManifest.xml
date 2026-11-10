@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Internet: Quran text/translation from api.alquran.cloud and verse
          audio streaming. Prayer times remain fully offline. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -26,6 +27,23 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- App Guard: covers a chosen "distracting" app with the "Allah is
+         calling" screen for the 15 minutes after a prayer enters.
+         PACKAGE_USAGE_STATS is a special AppOps permission — declaring it
+         here does not grant it; the user must grant it from
+         Settings.ACTION_USAGE_ACCESS_SETTINGS (see AppGuardPlugin). -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
+    <!-- SYSTEM_ALERT_WINDOW ("Display over other apps") is also a special
+         AppOps permission the user must grant separately; it exempts this
+         app from Android 10+'s background-activity-start restriction so the
+         guard screen can cover an app it did not launch. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
 
     <application
         android:label="Allah Is Calling"
@@ -77,6 +95,53 @@
             </intent-filter>
         </receiver>
 
+        <!-- App Guard: covers a chosen app with the "Allah is calling"
+             screen when it is opened during the 15 minutes after a prayer
+             enters. Own task, excluded from recents, no OS animation delay
+             expected from the user since it is launched the instant the
+             guarded app is detected in the foreground. -->
+        <activity
+            android:name=".guard.GuardBlockActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.salahinvite.allah_invites_you_to_salah.guard"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"/>
+
+        <!-- Foreground service that watches for guarded apps coming to the
+             foreground during a prayer's 15-minute guard window. -->
+        <service
+            android:name=".guard.AppGuardForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Watches the foreground app so a chosen app can be covered with a prayer-time reminder screen"/>
+        </service>
+
+        <!-- Fires at prayer time (scheduled alongside the prayer
+             notification) and starts the 15-minute guard window. A plain
+             exact alarm, independent of flutter_local_notifications, so the
+             guard runs even if the Flutter engine/isolate is not alive. -->
+        <receiver
+            android:name=".guard.GuardWindowAlarmReceiver"
+            android:exported="false"/>
+
+        <!-- Restarts any guard window that should still be active after a
+             reboot (mirrors ScheduledNotificationBootReceiver). -->
+        <receiver
+            android:name=".guard.GuardBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -92,6 +157,13 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- App Guard: list launchable apps for the "choose apps to guard"
+             picker. This exact filter signature is exempted from Android
+             11+ package-visibility filtering. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
     </queries>
 </manifest>

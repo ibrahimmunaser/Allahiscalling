@@ -6,6 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'config/app_config.dart';
+// Not referenced from this file directly: GuardBlockActivity (Android)
+// launches its own Flutter engine with entrypoint `guardMain`, defined
+// there. This import is what keeps that entry-point-annotated function in
+// the compiled app (Dart's AOT tree-shaker only retains an
+// `@pragma('vm:entry-point')` function if its library is reachable from
+// the app's root library at all — see flutter_local_notifications'
+// background callback for the same pattern, in this file's own
+// notificationActionBackground).
+// ignore: unused_import
+import 'guard_main.dart';
 import 'models/salah_prayer.dart';
 import 'repositories/prayer_settings_repository.dart';
 import 'screens/home_screen.dart';

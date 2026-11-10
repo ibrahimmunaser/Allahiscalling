@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/salah_prayer.dart';
 import '../utils/app_strings.dart';
+import 'app_guard_service.dart';
 import 'decline_flow.dart';
 import 'diagnostics_log.dart';
 import 'ios_alarmkit_service.dart';
@@ -154,6 +156,7 @@ class LocalNotificationService implements NotificationScheduler {
   static const int refreshReminderId = 2;
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final AppGuardService _appGuard;
 
   /// Called when the user taps a notification or its "Pray Now" action while
   /// the app is running (foreground/background). [actionId] is null for a
@@ -161,8 +164,11 @@ class LocalNotificationService implements NotificationScheduler {
   void Function(SalahNotificationPayload payload, String? actionId)?
   onNotificationTap;
 
-  LocalNotificationService([FlutterLocalNotificationsPlugin? plugin])
-    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  LocalNotificationService([
+    FlutterLocalNotificationsPlugin? plugin,
+    AppGuardService? appGuard,
+  ]) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       _appGuard = appGuard ?? AppGuardService();
 
   /// Deterministic ID per prayer occurrence: identical inputs always produce
   /// the same ID, so rescheduling replaces instead of duplicating.
@@ -401,6 +407,19 @@ class LocalNotificationService implements NotificationScheduler {
               prayer: prayer,
             ).encode(),
       );
+      // App Guard (Android only; a no-op elsewhere — see AppGuardService):
+      // arms the native 15-minute "cover guarded apps" window for the exact
+      // moment this prayer enters, independent of whether the Flutter
+      // engine/app is even running when that moment arrives. Keyed by the
+      // same deterministic [id] as this reminder so cancelling one cancels
+      // both (see cancel() below).
+      unawaited(
+        _appGuard.scheduleGuardWindow(
+          id: id,
+          prayer: prayer.displayName,
+          triggerAt: scheduledAt,
+        ),
+      );
       return const PrimaryReminderOutcome.notification();
     } catch (e) {
       // _zonedSchedule already retries inexact on a PlatformException; this
@@ -562,9 +581,17 @@ class LocalNotificationService implements NotificationScheduler {
   }
 
   @override
-  Future<void> cancel(int id) => _plugin.cancel(id);
+  Future<void> cancel(int id) {
+    // Harmless no-op on non-Android/when no guard window was ever scheduled
+    // for this id (follow-ups, snoozes, the refresh notification).
+    unawaited(_appGuard.cancelGuardWindow(id));
+    return _plugin.cancel(id);
+  }
 
-  Future<void> cancelAll() => _plugin.cancelAll();
+  Future<void> cancelAll() {
+    unawaited(_appGuard.cancelAllGuardWindows());
+    return _plugin.cancelAll();
+  }
 
   Future<List<PendingNotificationRequest>> pendingNotifications() =>
       _plugin.pendingNotificationRequests();
