@@ -903,6 +903,32 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Reserved id for the manual "test it now" guard window below — outside
+  /// the range [LocalNotificationService.notificationIdFor] can ever
+  /// produce (always >= 0), so it can never collide with a real prayer's
+  /// scheduled window.
+  static const int _demoGuardWindowId = -1;
+
+  /// Arms a guard window starting in a few seconds, instead of waiting for
+  /// the next real prayer time — for recording the Play Console demo video
+  /// / general testing. Requires guard to already be on with apps chosen
+  /// and both permissions granted; returns false (and schedules nothing) if
+  /// not, so the caller can tell the user what's missing.
+  Future<bool> triggerGuardWindowForTesting() async {
+    if (!guardSupported || !guardEnabled || guardedPackages.isEmpty) {
+      return false;
+    }
+    if (!await appGuardService.hasAllPermissions()) {
+      return false;
+    }
+    await appGuardService.scheduleGuardWindow(
+      id: _demoGuardWindowId,
+      prayer: 'Test',
+      triggerAt: DateTime.now().add(const Duration(seconds: 5)),
+    );
+    return true;
+  }
+
   // ---------------------------------------------------------- iOS app guard
 
   /// True only on iOS builds that actually have the Screen Time extensions

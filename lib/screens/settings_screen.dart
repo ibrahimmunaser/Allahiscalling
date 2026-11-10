@@ -860,6 +860,34 @@ class _AppGuardSectionState extends State<_AppGuardSection>
                   },
                 ),
               ],
+              if (_hasPermissions == true && enabled && guardedCount > 0) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.bolt_outlined),
+                  title: const Text('Test guard now'),
+                  subtitle: const Text(
+                    'Starts a 15-minute guard window in 5 seconds, without '
+                    'waiting for a real prayer time — handy for recording '
+                    'a demo.',
+                  ),
+                  onTap: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final ok = await controller.triggerGuardWindowForTesting();
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          ok
+                              ? 'Guard window starts in 5 seconds — open a '
+                                  'guarded app now.'
+                              : 'Could not start the test window. Check '
+                                  'permissions and that guard is on with '
+                                  'apps chosen.',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
