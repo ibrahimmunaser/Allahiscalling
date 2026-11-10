@@ -39,6 +39,32 @@ MAIN_BUNDLE_ID = 'com.salahinvite.allahInvitesYouToSalah'
 APP_GROUP = 'group.com.salahinvite.allahInvitesYouToSalah'
 DEPLOYMENT_TARGET = '16.0' # FamilyControls/DeviceActivity/ManagedSettingsUI minimum.
 
+# Runner/Runner.entitlements deliberately ships WITHOUT family-controls /
+# application-groups committed (see the comment in that file) — adding a
+# provisioning-profile-gated capability unconditionally breaks signing for
+# every ordinary release. Inject both keys here, only now that we know
+# ENABLE_SCREEN_TIME_EXTENSIONS=1 (i.e. Apple has approved the entitlement
+# and the main app's provisioning profile has been updated to support it).
+RUNNER_ENTITLEMENTS = File.join(ROOT, 'Runner', 'Runner.entitlements')
+PLISTBUDDY = '/usr/libexec/PlistBuddy'
+
+def plistbuddy_has_key?(path, key)
+  system("#{PLISTBUDDY} -c \"Print :#{key}\" \"#{path}\" > /dev/null 2>&1")
+end
+
+unless plistbuddy_has_key?(RUNNER_ENTITLEMENTS, 'com.apple.developer.family-controls')
+  system("#{PLISTBUDDY} -c \"Add :com.apple.developer.family-controls bool true\" \"#{RUNNER_ENTITLEMENTS}\"") ||
+    abort("Failed to add com.apple.developer.family-controls to #{RUNNER_ENTITLEMENTS}")
+end
+
+unless plistbuddy_has_key?(RUNNER_ENTITLEMENTS, 'com.apple.security.application-groups')
+  system("#{PLISTBUDDY} -c \"Add :com.apple.security.application-groups array\" \"#{RUNNER_ENTITLEMENTS}\"") &&
+    system("#{PLISTBUDDY} -c \"Add :com.apple.security.application-groups:0 string #{APP_GROUP}\" \"#{RUNNER_ENTITLEMENTS}\"") ||
+    abort("Failed to add com.apple.security.application-groups to #{RUNNER_ENTITLEMENTS}")
+end
+
+puts "Runner.entitlements now includes family-controls + application-groups (#{RUNNER_ENTITLEMENTS})."
+
 EXTENSIONS = [
   {
     name: 'DeviceActivityMonitorExtension',
