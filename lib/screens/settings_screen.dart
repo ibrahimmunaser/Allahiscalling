@@ -722,7 +722,13 @@ class _AppGuardSection extends StatefulWidget {
 }
 
 class _AppGuardSectionState extends State<_AppGuardSection> {
-  bool? _hasPermissions;
+  bool? _hasUsageAccess;
+  bool? _hasOverlayPermission;
+
+  bool? get _hasPermissions =>
+      (_hasUsageAccess == null || _hasOverlayPermission == null)
+          ? null
+          : _hasUsageAccess! && _hasOverlayPermission!;
 
   @override
   void initState() {
@@ -730,9 +736,25 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
     _refreshPermissions();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Re-check every time this screen is shown again (e.g. after coming
+    // back from one of the two system settings pages below), since Android
+    // doesn't tell us when the user granted/denied a permission there.
+    _refreshPermissions();
+  }
+
   Future<void> _refreshPermissions() async {
-    final hasAll = await context.read<AppController>().guardHasAllPermissions();
-    if (mounted) setState(() => _hasPermissions = hasAll);
+    final controller = context.read<AppController>();
+    final usage = await controller.guardHasUsageAccess();
+    final overlay = await controller.guardHasOverlayPermission();
+    if (mounted) {
+      setState(() {
+        _hasUsageAccess = usage;
+        _hasOverlayPermission = overlay;
+      });
+    }
   }
 
   @override
@@ -768,18 +790,18 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
                 onChanged: (v) async {
                   final messenger = ScaffoldMessenger.of(context);
                   if (v && _hasPermissions != true) {
-                    await _promptPermissions(context);
                     await _refreshPermissions();
-                    if (_hasPermissions != true) {
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Grant both permissions to turn on App Guard.',
-                          ),
+                  }
+                  if (v && _hasPermissions != true) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Grant both permissions below first, then turn '
+                          'this on.',
                         ),
-                      );
-                      return;
-                    }
+                      ),
+                    );
+                    return;
                   }
                   await controller.setGuardEnabled(v);
                 },
@@ -794,14 +816,35 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
                       MaterialPageRoute(builder: (_) => const AppGuardScreen()),
                     ),
               ),
-              if (_hasPermissions == false) ...[
+              if (_hasPermissions != true) ...[
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.warning_amber_outlined, color: Colors.orange),
-                  title: const Text('Permissions needed'),
-                  subtitle: const Text('Usage access and "Display over other apps"'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _promptPermissions(context),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text(
+                    'Two permissions needed — grant each one below, then '
+                    'come back:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ),
+                _PermissionTile(
+                  granted: _hasUsageAccess,
+                  title: 'Usage access',
+                  subtitle: 'Lets App Guard see which app you just opened',
+                  onTap: () async {
+                    await context.read<AppController>().requestGuardUsageAccess();
+                    await _refreshPermissions();
+                  },
+                ),
+                _PermissionTile(
+                  granted: _hasOverlayPermission,
+                  title: 'Display over other apps',
+                  subtitle: 'Lets App Guard show the guard screen on top',
+                  onTap: () async {
+                    await context
+                        .read<AppController>()
+                        .requestGuardOverlayPermission();
+                    await _refreshPermissions();
+                  },
                 ),
               ],
             ],
@@ -810,35 +853,40 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
       ],
     );
   }
+}
 
-  Future<void> _promptPermissions(BuildContext context) async {
-    final controller = context.read<AppController>();
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder:
-          (dialogContext) => AlertDialog(
-            title: const Text('Two permissions needed'),
-            content: const Text(
-              'App Guard needs "Usage access" (to see which app is open) '
-              'and "Display over other apps" (to show the guard screen on '
-              'top of it). Android will open each settings page in turn — '
-              'find this app and turn the permission on, then come back.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('Continue'),
-              ),
-            ],
-          ),
+/// One of the two App Guard permission rows — tapping it opens *only* that
+/// permission's own system settings page. Kept as two separate buttons
+/// (rather than firing both settings Intents back-to-back) because Android
+/// treats the app as no longer foreground the instant the first settings
+/// page opens, which silently blocks a second `startActivity` fired right
+/// after it on some OEM builds (observed on Samsung/One UI).
+class _PermissionTile extends StatelessWidget {
+  const _PermissionTile({
+    required this.granted,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final bool? granted;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isGranted = granted == true;
+    return ListTile(
+      leading: Icon(
+        isGranted ? Icons.check_circle : Icons.warning_amber_outlined,
+        color: isGranted ? Colors.green : Colors.orange,
+      ),
+      title: Text(title),
+      subtitle: Text(isGranted ? 'Granted' : subtitle),
+      trailing: isGranted ? null : const Icon(Icons.chevron_right),
+      onTap: isGranted ? null : onTap,
     );
-    if (proceed != true) return;
-    await controller.requestGuardUsageAccess();
-    await controller.requestGuardOverlayPermission();
   }
 }
 

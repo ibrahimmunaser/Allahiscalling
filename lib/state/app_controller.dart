@@ -871,6 +871,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// on unsupported platforms.
   Future<bool> guardHasAllPermissions() => appGuardService.hasAllPermissions();
 
+  Future<bool> guardHasUsageAccess() => appGuardService.hasUsageAccess();
+
+  Future<bool> guardHasOverlayPermission() =>
+      appGuardService.hasOverlayPermission();
+
   Future<void> requestGuardUsageAccess() =>
       appGuardService.requestUsageAccess();
 
