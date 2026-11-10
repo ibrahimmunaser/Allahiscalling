@@ -721,7 +721,8 @@ class _AppGuardSection extends StatefulWidget {
   State<_AppGuardSection> createState() => _AppGuardSectionState();
 }
 
-class _AppGuardSectionState extends State<_AppGuardSection> {
+class _AppGuardSectionState extends State<_AppGuardSection>
+    with WidgetsBindingObserver {
   bool? _hasUsageAccess;
   bool? _hasOverlayPermission;
 
@@ -733,16 +734,28 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshPermissions();
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Re-check every time this screen is shown again (e.g. after coming
-    // back from one of the two system settings pages below), since Android
-    // doesn't tell us when the user granted/denied a permission there.
-    _refreshPermissions();
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check only when the app actually comes back to the foreground
+    // (e.g. returning from one of the two system settings pages below),
+    // since Android doesn't tell us when the user granted/denied a
+    // permission there. Deliberately NOT done in didChangeDependencies:
+    // that also fires on every unrelated AppController.notifyListeners()
+    // (prayer-time timers, etc.), which was re-running this async check —
+    // and the setState it triggers — mid-scroll, causing visible jank.
+    if (state == AppLifecycleState.resumed) {
+      _refreshPermissions();
+    }
   }
 
   Future<void> _refreshPermissions() async {
