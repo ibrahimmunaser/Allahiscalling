@@ -64,15 +64,38 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/guard_subtitle"
+            android:id="@+id/guard_headline"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:gravity="center"
-            android:lineSpacingMultiplier="1.3"
-            android:text="This app will stay closed until you answer or decline."
+            android:lineSpacingMultiplier="1.25"
+            android:text="Your apps have been blocked.\nGet up and pray."
+            android:textColor="@color/guard_ivory"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/guard_unlock_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="Your apps unlock in"
             android:textColor="@color/guard_ivory_dim"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/guard_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:letterSpacing="0.06"
+            android:text="15:00"
+            android:textColor="@color/guard_soft_gold"
+            android:textSize="42sp"
+            android:textStyle="bold" />
 
         <View
             android:layout_width="0dp"

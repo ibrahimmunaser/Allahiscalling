@@ -10,11 +10,20 @@ class GuardableApp {
   final String package;
   final String label;
 
-  const GuardableApp({required this.package, required this.label});
+  /// Coarse Android category: `social`, `video`, `game`, `audio`, `image`,
+  /// `news`, or `other`. Used by quick-select presets.
+  final String category;
+
+  const GuardableApp({
+    required this.package,
+    required this.label,
+    this.category = 'other',
+  });
 
   factory GuardableApp.fromMap(Map<dynamic, dynamic> map) => GuardableApp(
     package: map['package'] as String,
     label: map['label'] as String,
+    category: (map['category'] as String?) ?? 'other',
   );
 }
 

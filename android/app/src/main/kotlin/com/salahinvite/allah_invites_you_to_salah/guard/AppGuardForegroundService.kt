@@ -56,6 +56,8 @@ class AppGuardForegroundService : Service() {
     private var pollRunnable: Runnable? = null
     private var stopRunnable: Runnable? = null
     private val exemptedThisWindow = mutableSetOf<String>()
+    private var windowEndAtMillis: Long = 0L
+    private var currentPrayer: String = "Prayer"
 
     /** The guarded package the block screen is currently (believed to be) showing for. */
     @Volatile
@@ -81,6 +83,8 @@ class AppGuardForegroundService : Service() {
 
         exemptedThisWindow.clear()
         blockScreenShowingFor = null
+        windowEndAtMillis = endAt
+        currentPrayer = prayer
 
         startForeground(NOTIFICATION_ID, buildNotification(prayer))
         GuardBlockActivity.prewarm(this)
@@ -93,17 +97,17 @@ class AppGuardForegroundService : Service() {
         stopRunnable = stop
         handler.postDelayed(stop, remaining)
 
-        startPolling(prayer)
+        startPolling()
         return START_NOT_STICKY
     }
 
-    private fun startPolling(prayer: String) {
+    private fun startPolling() {
         pollRunnable?.let { handler.removeCallbacks(it) }
         val ownPackage = packageName
         lateinit var runnable: Runnable
         runnable = Runnable {
             try {
-                checkForegroundApp(prayer, ownPackage)
+                checkForegroundApp(ownPackage)
             } catch (_: Exception) {
                 // A single failed poll (e.g. a transient AppOps hiccup) must
                 // never stop the whole 15-minute watch.
@@ -114,7 +118,7 @@ class AppGuardForegroundService : Service() {
         handler.post(runnable)
     }
 
-    private fun checkForegroundApp(prayer: String, ownPackage: String) {
+    private fun checkForegroundApp(ownPackage: String) {
         val guarded = GuardPrefs.guardedPackages(this)
         if (guarded.isEmpty()) return
 
@@ -135,7 +139,7 @@ class AppGuardForegroundService : Service() {
         if (fg == blockScreenShowingFor) return // already covering it
 
         blockScreenShowingFor = fg
-        GuardBlockActivity.start(this, prayer, fg)
+        GuardBlockActivity.start(this, currentPrayer, fg, windowEndAtMillis)
     }
 
     /**

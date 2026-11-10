@@ -31,10 +31,9 @@ import 'services/prayer_scheduler_service.dart';
 import 'services/prayer_time_service.dart';
 import 'services/timezone_service.dart';
 import 'state/app_controller.dart';
+import 'navigation.dart';
 import 'utils/app_strings.dart';
 import 'utils/app_theme.dart';
-
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -257,6 +256,7 @@ class SalahApp extends StatelessWidget {
         title: AppStrings.appTitle,
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,
+        navigatorObservers: [routeObserver],
         theme: AppTheme.light(),
         home: const HomeScreen(),
       ),

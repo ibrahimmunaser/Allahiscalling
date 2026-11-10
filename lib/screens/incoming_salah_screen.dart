@@ -13,6 +13,7 @@ import '../models/salah_prayer.dart';
 import '../state/app_controller.dart';
 import '../utils/app_strings.dart';
 import '../utils/app_theme.dart';
+import '../utils/system_ui.dart';
 
 /// How the user left the incoming reminder screen. A null route result
 /// (backing out without choosing) is a distinct third outcome — "dismissed"
@@ -97,8 +98,12 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
       duration: const Duration(milliseconds: 2600),
     )..repeat();
 
-    // Immersive full-screen, like a real incoming call.
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Hide system bars without immersiveSticky — that mode was leaving
+    // Settings with unstable insets (scroll jump) after Preview returned.
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: const [],
+    );
     // Lock to portrait so the call layout never rotates.
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -189,23 +194,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     _rippleController.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
-    // Restore the normal chrome. Prefer showing all overlays explicitly —
-    // SystemUiMode.edgeToEdge alone was leaving Settings with unstable
-    // inset/layout behavior (visible scroll jank after Preview reminder).
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-    );
-    // Restore all orientations when leaving the call screen.
-    SystemChrome.setPreferredOrientations([]);
+    restoreAppSystemUi();
     super.dispose();
   }
 
@@ -213,6 +202,9 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     if (_actionChosen) return;
     _actionChosen = true;
     _stopAlerting();
+    // Restore chrome *before* popping so Settings never paints one frame
+    // still missing status/nav insets (that was the scroll glitch).
+    restoreAppSystemUi();
     HapticFeedback.selectionClick();
     // The caller records the answered state and shows the gentle completion
     // prompt later.
@@ -224,6 +216,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     if (_actionChosen) return;
     _actionChosen = true;
     _stopAlerting();
+    restoreAppSystemUi();
     final controller = context.read<AppController>();
     final messenger = ScaffoldMessenger.of(context);
     final minutes = controller.settings.snoozeMinutes;

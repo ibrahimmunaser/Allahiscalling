@@ -3,6 +3,7 @@ package com.salahinvite.allah_invites_you_to_salah.guard
 import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -166,8 +167,36 @@ class AppGuardPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 mapOf(
                     "package" to pkg,
                     "label" to info.loadLabel(pm).toString(),
+                    "category" to appCategory(pm, pkg),
                 )
             }
             .sortedBy { it["label"]?.lowercase() }
+    }
+
+    /** Coarse Play Store category for quick-select presets in Flutter. */
+    private fun appCategory(pm: PackageManager, packageName: String): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return "other"
+        return try {
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0L),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getApplicationInfo(packageName, 0)
+            }
+            when (info.category) {
+                ApplicationInfo.CATEGORY_SOCIAL -> "social"
+                ApplicationInfo.CATEGORY_VIDEO -> "video"
+                ApplicationInfo.CATEGORY_GAME -> "game"
+                ApplicationInfo.CATEGORY_AUDIO -> "audio"
+                ApplicationInfo.CATEGORY_IMAGE -> "image"
+                ApplicationInfo.CATEGORY_NEWS -> "news"
+                else -> "other"
+            }
+        } catch (_: Exception) {
+            "other"
+        }
     }
 }

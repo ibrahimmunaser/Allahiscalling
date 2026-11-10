@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../navigation.dart';
 import '../models/prayer_settings.dart';
 import '../models/salah_prayer.dart';
 import '../state/app_controller.dart';
 import '../utils/app_strings.dart';
 import '../utils/app_theme.dart';
 import '../utils/formatting.dart';
+import '../utils/system_ui.dart';
 import '../widgets/location_feedback.dart';
 import 'app_guard_screen.dart';
 import 'diagnostics_screen.dart';
@@ -38,13 +40,30 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning from Preview reminder (or any pushed route): force chrome
+    // back so ListView insets stay stable while scrolling.
+    restoreAppSystemUi();
   }
 
   @override
@@ -56,6 +75,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         controller: _scrollController,
+        // Clamping avoids rubber-band fights with system inset changes that
+        // looked like "glitching" when scrolling back up on some devices.
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
         padding: const EdgeInsets.all(16),
         children: [
           _SectionHeader('Location'),
@@ -804,8 +828,10 @@ class _AppGuardSectionState extends State<_AppGuardSection>
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Text(
                   'For the 15 minutes after each prayer enters, apps you '
-                  'choose will show "Allah Is Calling" with Answer and '
-                  'Decline every time you open them.',
+                  'choose stay blocked with a countdown until the window '
+                  'ends. Use quick picks (all except calls & messages, or '
+                  'social & entertainment) so you do not have to tick every '
+                  'app.',
                   style: TextStyle(fontSize: 13, color: Colors.grey),
                 ),
               ),
@@ -840,6 +866,9 @@ class _AppGuardSectionState extends State<_AppGuardSection>
               ListTile(
                 leading: const Icon(Icons.apps_outlined),
                 title: const Text('Choose apps to guard'),
+                subtitle: const Text(
+                  'Quick picks: all except calls & messages, or social',
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap:
                     () => Navigator.of(context).push(
