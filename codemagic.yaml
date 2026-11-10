@@ -77,8 +77,16 @@ workflows:
             --dart-define=SUPPORT_EMAIL=$SUPPORT_EMAIL \
             --dart-define=WEBSITE_URL=$WEBSITE_URL
 
+      - name: Build installable APK (for sideloading / phone testing)
+        script: |
+          flutter build apk --release \
+            --dart-define=PRIVACY_POLICY_URL=$PRIVACY_POLICY_URL \
+            --dart-define=SUPPORT_EMAIL=$SUPPORT_EMAIL \
+            --dart-define=WEBSITE_URL=$WEBSITE_URL
+
     artifacts:
       - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/**/mapping.txt
 
     publishing:
@@ -88,10 +96,17 @@ workflows:
         notify:
           success: true
           failure: true
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: production
-        submit_as_draft: false
+      # Google Play publishing is disabled until the Foreground Service
+      # declaration (Play Console → App content → Foreground service
+      # permissions) is completed for this app — the API rejects the
+      # release with "You must let us know whether your app uses any
+      # Foreground Service permissions" otherwise, which fails the whole
+      # build even though the .aab/.apk artifacts were already produced.
+      # Re-enable once that declaration is saved in Play Console:
+      # google_play:
+      #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      #   track: production
+      #   submit_as_draft: false
 
   # ────────────────────────────────────────────────────────────────────────────
   # iOS — one-time: create App Store provisioning profile on Apple
