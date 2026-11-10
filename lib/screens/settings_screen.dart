@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -360,6 +362,10 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 16),
           if (controller.guardSupported) ...[
             const _AppGuardSection(),
+            const SizedBox(height: 16),
+          ],
+          if (!kIsWeb && Platform.isIOS) ...[
+            const _IosAppGuardSection(),
             const SizedBox(height: 16),
           ],
           _SectionHeader('Display'),
@@ -833,6 +839,125 @@ class _AppGuardSectionState extends State<_AppGuardSection> {
     if (proceed != true) return;
     await controller.requestGuardUsageAccess();
     await controller.requestGuardOverlayPermission();
+  }
+}
+
+/// iOS equivalent of [_AppGuardSection]. Renders nothing until confirmed
+/// supported (the Screen Time extensions ship disabled by default — see
+/// IOS_SCREEN_TIME_SETUP.md) — not just "not on iOS", but "not yet enabled
+/// in this build".
+class _IosAppGuardSection extends StatefulWidget {
+  const _IosAppGuardSection();
+
+  @override
+  State<_IosAppGuardSection> createState() => _IosAppGuardSectionState();
+}
+
+class _IosAppGuardSectionState extends State<_IosAppGuardSection> {
+  bool? _supported;
+  String _authStatus = 'notDetermined';
+  int? _appsCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final controller = context.read<AppController>();
+    final supported = await controller.iosGuardSupported();
+    final status =
+        supported ? await controller.iosGuardAuthorizationStatus() : 'unavailable';
+    if (mounted) {
+      setState(() {
+        _supported = supported;
+        _authStatus = status;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_supported != true) return const SizedBox.shrink();
+
+    final controller = context.watch<AppController>();
+    final enabled = controller.guardEnabled;
+    final authorized = _authStatus == 'approved';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader('Guard apps during prayer time'),
+        Card(
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  'For the 15 minutes after each prayer enters, the apps '
+                  'you choose will show "Allah Is Calling" with Answer and '
+                  'Decline every time you open them.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('Guard apps'),
+                subtitle: Text(
+                  !authorized
+                      ? 'Screen Time access needed'
+                      : _appsCount == null
+                      ? 'Tap "Choose apps to guard" to pick apps'
+                      : '$_appsCount app${_appsCount == 1 ? '' : 's'}/categories guarded',
+                ),
+                value: enabled,
+                onChanged: (v) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  if (v && !authorized) {
+                    final status = await controller.requestIosGuardAuthorization();
+                    if (mounted) setState(() => _authStatus = status);
+                    if (status != 'approved') {
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Screen Time access is required to turn on App Guard.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+                  await controller.setIosGuardEnabled(v);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.apps_outlined),
+                title: const Text('Choose apps to guard'),
+                subtitle: const Text(
+                  "Apple's own picker — this app never learns which apps "
+                  'you chose, only how many.',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  if (!authorized) {
+                    final status = await controller.requestIosGuardAuthorization();
+                    if (mounted) setState(() => _authStatus = status);
+                    if (status != 'approved') return;
+                  }
+                  final result = await controller.presentIosGuardPicker();
+                  if (result != null && mounted) {
+                    setState(
+                      () => _appsCount = result.appsCount + result.categoriesCount,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 

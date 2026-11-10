@@ -23,6 +23,7 @@ import 'screens/incoming_salah_screen.dart';
 import 'services/diagnostics_log.dart';
 import 'services/geocoding_service.dart';
 import 'services/ios_alarmkit_service.dart';
+import 'services/ios_app_guard_service.dart';
 import 'services/ios_hybrid_notification_scheduler.dart';
 import 'services/local_notification_service.dart';
 import 'services/location_service.dart';
@@ -73,6 +74,9 @@ Future<void> main() async {
           )
           : notificationService;
 
+  final iosAppGuardService =
+      (!kIsWeb && Platform.isIOS) ? IosAppGuardService() : null;
+
   final controller = AppController(
     repository: repository,
     prayerTimeService: prayerTimeService,
@@ -81,10 +85,12 @@ Future<void> main() async {
     notificationService: notificationService,
     notificationScheduler: notificationScheduler,
     alarmKitService: alarmKitService,
+    iosAppGuardService: iosAppGuardService,
     schedulerService: PrayerSchedulerService(
       prayerTimeService: prayerTimeService,
       notificationScheduler: notificationScheduler,
       repository: repository,
+      iosAppGuardService: iosAppGuardService,
     ),
     geocodingService: GeocodingService(
       prefs: repository.prefs,

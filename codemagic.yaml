@@ -21,6 +21,11 @@ workflows:
       vars:
         BUNDLE_ID: com.salahinvite.allahInvitesYouToSalah
         PROFILE_NAME: Allah Invites You to Salah App Store
+        # Set to 1 (as a Codemagic env var on this workflow) only once Apple
+        # has approved the Family Controls distribution entitlement — then
+        # this also creates profiles for the 3 Screen Time extension bundle
+        # IDs. See IOS_SCREEN_TIME_SETUP.md.
+        ENABLE_SCREEN_TIME_EXTENSIONS: 0
 
     triggering:
       events:
@@ -30,39 +35,11 @@ workflows:
           include: true
 
     scripts:
-      - name: Create App Store provisioning profile on Apple
+      - name: Create App Store provisioning profile(s) on Apple
         script: |
           set -e
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-
-          if app-store-connect profiles list \
-              --type IOS_APP_STORE \
-              --name "$PROFILE_NAME" \
-              --profiles-dir "$PROFILE_DIR" \
-              --save && compgen -G "$PROFILE_DIR"/*.mobileprovision > /dev/null; then
-            echo "Profile already exists on Apple."
-            exit 0
-          fi
-
-          echo "Registering bundle ID on Apple Developer Portal (if needed)..."
-          BUNDLE_ID_RES=$(app-store-connect bundle-ids list --json | python3 -c "
-          import json, sys, os
-          bid = os.environ['BUNDLE_ID']
-          for item in json.load(sys.stdin):
-              attrs = item.get('attributes') or {}
-              if attrs.get('identifier') == bid:
-                  print(item['id'])
-                  break
-          else:
-              sys.exit('MISSING')
-          " || echo MISSING)
-
-          if [ "$BUNDLE_ID_RES" = "MISSING" ]; then
-            BUNDLE_ID_RES=$(app-store-connect bundle-ids create "$BUNDLE_ID" \
-              --name "Allah Invites You to Salah" \
-              --platform IOS --json | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
-          fi
 
           CERT_ID=$(app-store-connect certificates list --json | python3 -c "
           import json, sys
@@ -81,15 +58,58 @@ workflows:
               sys.exit('No distribution certificate found on Apple Developer Portal')
           ")
 
-          echo "Creating App Store provisioning profile on Apple Developer Portal..."
-          app-store-connect profiles create "$BUNDLE_ID_RES" \
-            --certificate-ids "$CERT_ID" \
-            --type IOS_APP_STORE \
-            --name "$PROFILE_NAME" \
-            --profiles-dir "$PROFILE_DIR" \
-            --save
+          # Each entry: "<bundle id>|<profile name>|<reference name to fetch in Codemagic UI>"
+          PROFILE_JOBS=("$BUNDLE_ID|$PROFILE_NAME|salah_appstore")
+          if [ "$ENABLE_SCREEN_TIME_EXTENSIONS" = "1" ]; then
+            PROFILE_JOBS+=(
+              "$BUNDLE_ID.deviceactivitymonitor|Allah Invites You to Salah DeviceActivityMonitor|salah_appstore_deviceactivitymonitor"
+              "$BUNDLE_ID.shieldconfiguration|Allah Invites You to Salah ShieldConfiguration|salah_appstore_shieldconfiguration"
+              "$BUNDLE_ID.shieldaction|Allah Invites You to Salah ShieldAction|salah_appstore_shieldaction"
+            )
+          fi
 
-          echo "Done. Now fetch the profile in Codemagic UI with reference: salah_appstore"
+          for job in "${PROFILE_JOBS[@]}"; do
+            IFS='|' read -r JOB_BUNDLE_ID JOB_PROFILE_NAME JOB_REF_NAME <<< "$job"
+            export JOB_BUNDLE_ID
+
+            if app-store-connect profiles list \
+                --type IOS_APP_STORE \
+                --name "$JOB_PROFILE_NAME" \
+                --profiles-dir "$PROFILE_DIR" \
+                --save && compgen -G "$PROFILE_DIR"/*.mobileprovision > /dev/null; then
+              echo "Profile '$JOB_PROFILE_NAME' already exists on Apple."
+              continue
+            fi
+
+            echo "Registering bundle ID $JOB_BUNDLE_ID on Apple Developer Portal (if needed)..."
+            BUNDLE_ID_RES=$(app-store-connect bundle-ids list --json | python3 -c "
+          import json, sys, os
+          bid = os.environ['JOB_BUNDLE_ID']
+          for item in json.load(sys.stdin):
+              attrs = item.get('attributes') or {}
+              if attrs.get('identifier') == bid:
+                  print(item['id'])
+                  break
+          else:
+              sys.exit('MISSING')
+          " || echo MISSING)
+
+            if [ "$BUNDLE_ID_RES" = "MISSING" ]; then
+              BUNDLE_ID_RES=$(app-store-connect bundle-ids create "$JOB_BUNDLE_ID" \
+                --name "$JOB_PROFILE_NAME" \
+                --platform IOS --json | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+            fi
+
+            echo "Creating App Store provisioning profile '$JOB_PROFILE_NAME' on Apple Developer Portal..."
+            app-store-connect profiles create "$BUNDLE_ID_RES" \
+              --certificate-ids "$CERT_ID" \
+              --type IOS_APP_STORE \
+              --name "$JOB_PROFILE_NAME" \
+              --profiles-dir "$PROFILE_DIR" \
+              --save
+
+            echo "Done. Now fetch in Codemagic UI with reference: $JOB_REF_NAME"
+          done
 
   # ────────────────────────────────────────────────────────────────────────────
   # iOS — builds a signed IPA and uploads to TestFlight
@@ -118,6 +138,9 @@ workflows:
         SUPPORT_EMAIL: themuslimman77@gmail.com
         WEBSITE_URL: https://ibrahimmunaser.github.io/Allahiscalling/
       ios_signing:
+        # Once ENABLE_SCREEN_TIME_EXTENSIONS=1 and Apple has approved the
+        # Family Controls entitlement, add 3 more fetched profiles here —
+        # one per extension bundle ID — see IOS_SCREEN_TIME_SETUP.md.
         provisioning_profiles:
           - salah_appstore
         certificates:
@@ -133,6 +156,14 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
+
+      - name: Set up Screen Time extension targets (App Guard)
+        script: |
+          # No-op unless ENABLE_SCREEN_TIME_EXTENSIONS=1 is set as a Codemagic
+          # environment variable — see ios/scripts/setup_screen_time_targets.rb
+          # and IOS_SCREEN_TIME_SETUP.md. Safe to always run.
+          gem install xcodeproj --no-document
+          ruby ios/scripts/setup_screen_time_targets.rb
 
       - name: Install CocoaPods
         script: find . -name "Podfile" -execdir pod install \;

@@ -10,6 +10,23 @@
 	     capability (verify in Xcode: Runner > Signing & Capabilities). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- App Guard (Screen Time shield): requires Apple's approval before
+	     this entitlement works on a real device/App Store build — request
+	     it at https://developer.apple.com/contact/request/family-controls-distribution
+	     (see IOS_SCREEN_TIME_SETUP.md). Without approval, FamilyControls
+	     authorization calls fail gracefully (AppGuardManager reports
+	     "unsupported"); the rest of the app is unaffected either way. -->
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+	<!-- Shares the user's guarded-app selection and the active prayer name
+	     with the three Screen Time extensions (DeviceActivityMonitor,
+	     ShieldConfiguration, ShieldAction) — see GuardShared.swift. Must
+	     also be enabled as an App Group capability on the Apple Developer
+	     portal for this bundle ID and each extension's bundle ID. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.salahinvite.allahInvitesYouToSalah</string>
+	</array>
 	<!-- AlarmKit: deliberately NOT added here. Apple's own AlarmKit docs
 	     (WWDC25, developer.apple.com/documentation/alarmkit) describe setup
 	     as ONLY NSAlarmKitUsageDescription (see Info.plist) + calling

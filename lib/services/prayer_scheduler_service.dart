@@ -8,6 +8,7 @@ import '../models/salah_prayer.dart';
 import '../models/scheduled_reminder.dart';
 import '../repositories/prayer_settings_repository.dart';
 import 'diagnostics_log.dart';
+import 'ios_app_guard_service.dart';
 import 'local_notification_service.dart';
 import 'notification_reconciliation.dart';
 import 'ios_hybrid_notification_scheduler.dart';
@@ -147,6 +148,11 @@ class PrayerSchedulerService {
   final PrayerSettingsRepository repository;
   final SchedulingPolicy policy;
 
+  /// iOS App Guard (Screen Time) bridge — kept in sync with today's prayer
+  /// times on every reschedule. Null/no-op on Android and in tests that
+  /// don't care about it.
+  final IosAppGuardService? iosAppGuardService;
+
   /// Overridable clock for tests.
   final DateTime Function() now;
 
@@ -155,6 +161,7 @@ class PrayerSchedulerService {
     required this.notificationScheduler,
     required this.repository,
     SchedulingPolicy? policy,
+    this.iosAppGuardService,
     DateTime Function()? now,
   }) : policy = policy ?? SchedulingPolicy.forPlatform(),
        now = now ?? DateTime.now;
@@ -206,6 +213,7 @@ class PrayerSchedulerService {
 
     if (!enabled) {
       await repository.saveScheduledReminders([]);
+      unawaited(iosAppGuardService?.cancelAllGuardWindows());
       return [];
     }
 
@@ -241,6 +249,20 @@ class PrayerSchedulerService {
       for (final day in days)
         for (final entry in day.orderedEntries) (entry.key, entry.value),
     ];
+
+    // iOS App Guard: each prayer's soonest upcoming local time becomes that
+    // prayer's daily-repeating DeviceActivitySchedule. No-op unless
+    // guarding is both supported and enabled (checked natively — see
+    // IosAppGuardService/AppGuardManager.swift).
+    if (iosAppGuardService != null && repository.guardEnabled) {
+      final nextByPrayer = <SalahPrayer, DateTime>{};
+      for (final (prayer, time) in allPrayers) {
+        nextByPrayer.putIfAbsent(prayer, () => time);
+      }
+      if (nextByPrayer.isNotEmpty) {
+        unawaited(iosAppGuardService!.syncSchedule(nextByPrayer));
+      }
+    }
 
     final usedIds = <int>{for (final s in carriedSnoozes) s.notificationId};
 

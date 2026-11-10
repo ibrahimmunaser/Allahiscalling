@@ -21,6 +21,7 @@ import '../services/geocoding_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/location_service.dart';
 import '../services/ios_alarmkit_service.dart';
+import '../services/ios_app_guard_service.dart';
 import '../services/prayer_scheduler_service.dart';
 import '../services/prayer_time_service.dart';
 import '../services/timezone_service.dart';
@@ -52,6 +53,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Android-only App Guard bridge (no-op elsewhere — see AppGuardService).
   final AppGuardService appGuardService;
+
+  /// iOS-only App Guard (Screen Time) bridge (no-op elsewhere — see
+  /// IosAppGuardService).
+  final IosAppGuardService iosAppGuardService;
 
   /// Set by the app shell so notification taps can navigate.
   /// [actionId] is the notification action that was tapped (e.g. "Pray Now"),
@@ -105,8 +110,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     NotificationScheduler? notificationScheduler,
     this.alarmKitService,
     AppGuardService? appGuardService,
+    IosAppGuardService? iosAppGuardService,
   }) : notificationScheduler = notificationScheduler ?? notificationService,
-       appGuardService = appGuardService ?? AppGuardService();
+       appGuardService = appGuardService ?? AppGuardService(),
+       iosAppGuardService = iosAppGuardService ?? IosAppGuardService();
 
   PrayerSettings get settings => _settings;
   PrayerDayTimes? get today => _today;
@@ -228,6 +235,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (appGuardService.isSupported) {
       unawaited(appGuardService.setGuardEnabled(repository.guardEnabled));
       unawaited(appGuardService.setGuardedPackages(repository.guardedPackages));
+    }
+    if (iosAppGuardService.isPlatformIOS) {
+      unawaited(iosAppGuardService.setGuardEnabled(repository.guardEnabled));
     }
 
     // Cold-start from a notification tap. Skip if the plugin already
@@ -885,6 +895,48 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setGuardedPackages(List<String> packages) async {
     await repository.saveGuardedPackages(packages);
     await appGuardService.setGuardedPackages(packages);
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------- iOS app guard
+
+  /// True only on iOS builds that actually have the Screen Time extensions
+  /// compiled in (false until ENABLE_SCREEN_TIME_EXTENSIONS=1 ships — see
+  /// IOS_SCREEN_TIME_SETUP.md). Checked live, async, since it can't be
+  /// known at compile time of this shared Dart code.
+  Future<bool> iosGuardSupported() => iosAppGuardService.isSupported();
+
+  Future<String> iosGuardAuthorizationStatus() =>
+      iosAppGuardService.authorizationStatus();
+
+  Future<String> requestIosGuardAuthorization() =>
+      iosAppGuardService.requestAuthorization();
+
+  /// Presents Apple's own app/category picker. Returns how many were
+  /// selected (never which ones — see IosAppGuardService) so the Settings
+  /// UI can show "12 apps guarded" without this app ever learning which 12.
+  Future<({int appsCount, int categoriesCount})?> presentIosGuardPicker() =>
+      iosAppGuardService.presentPicker();
+
+  /// Shares the same persisted flag as Android's [guardEnabled] — only one
+  /// platform's guard implementation is ever compiled into a given build,
+  /// so there is no ambiguity in reusing it.
+  Future<void> setIosGuardEnabled(bool enabled) async {
+    await repository.saveGuardEnabled(enabled);
+    await iosAppGuardService.setGuardEnabled(enabled);
+    // Schedules (or clears) today's DeviceActivitySchedule immediately
+    // rather than waiting for the next full reschedule, so toggling the
+    // switch visibly takes effect right away.
+    if (enabled) {
+      final next = schedulerService.nextScheduledReminder();
+      if (next != null) {
+        unawaited(
+          iosAppGuardService.syncSchedule({next.prayer: next.scheduledAt}),
+        );
+      }
+    } else {
+      unawaited(iosAppGuardService.cancelAllGuardWindows());
+    }
     notifyListeners();
   }
 
