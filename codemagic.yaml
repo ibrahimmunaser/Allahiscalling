@@ -1,6 +1,99 @@
 workflows:
 
   # ────────────────────────────────────────────────────────────────────────────
+  # Android — builds a signed App Bundle and publishes to Google Play
+  #
+  # Prerequisites in Codemagic (Team settings → Environment variables),
+  # as two variable GROUPS so the names below resolve — mark every one of
+  # these "Secure":
+  #
+  #   Group "android_signing":
+  #     ANDROID_KEYSTORE_BASE64   — `certutil -encode upload-keystore.jks keystore.b64`
+  #                                 (Windows) or `base64 -i upload-keystore.jks`
+  #                                 (Mac/Linux), paste the single-line result
+  #                                 (strip certutil's BEGIN/END lines if present)
+  #     ANDROID_KEYSTORE_PASSWORD — same values as android/key.properties
+  #     ANDROID_KEY_ALIAS
+  #     ANDROID_KEY_PASSWORD
+  #
+  #   Group "google_play":
+  #     GCLOUD_SERVICE_ACCOUNT_CREDENTIALS — paste the FULL JSON content of a
+  #       Google Cloud service account key that has been granted access in
+  #       Play Console → Setup → API access, with at least "Release manager"
+  #       permission for this app. Create the key in Google Cloud Console
+  #       (IAM & Admin → Service Accounts → Keys → Add key → JSON).
+  #
+  # This app must already exist in Play Console with at least one manually
+  # uploaded release before the Google Play Developer API will accept a
+  # publish — a brand-new app cannot be created via this API.
+  #
+  # Ships straight to the "production" track with no manual review step on
+  # your end once this build succeeds — double-check this is really what
+  # you want before pushing a tag; switch `track: production` to
+  # `track: internal` below for a safer first run if in doubt.
+  # ────────────────────────────────────────────────────────────────────────────
+  android-release:
+    name: Android Release
+    max_build_duration: 30
+    instance_type: linux_x2
+
+    environment:
+      flutter: stable
+      vars:
+        PRIVACY_POLICY_URL: https://ibrahimmunaser.github.io/Allahiscalling/
+        SUPPORT_EMAIL: themuslimman77@gmail.com
+        WEBSITE_URL: https://ibrahimmunaser.github.io/Allahiscalling/
+      groups:
+        - android_signing
+        - google_play
+
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Set up Android release signing
+        script: |
+          set -e
+          KEYSTORE_PATH="$CM_BUILD_DIR/android/app/upload-keystore.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          # android/app/build.gradle.kts reads these exact env var names as
+          # a fallback when android/key.properties doesn't exist (which it
+          # doesn't on CI) — see signingValue() there.
+          cat >> "$CM_ENV" <<EOF
+          ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH
+          EOF
+
+      - name: Build App Bundle
+        script: |
+          flutter build appbundle --release \
+            --dart-define=PRIVACY_POLICY_URL=$PRIVACY_POLICY_URL \
+            --dart-define=SUPPORT_EMAIL=$SUPPORT_EMAIL \
+            --dart-define=WEBSITE_URL=$WEBSITE_URL
+
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/**/mapping.txt
+
+    publishing:
+      email:
+        recipients:
+          - themuslimman77@gmail.com
+        notify:
+          success: true
+          failure: true
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: production
+        submit_as_draft: false
+
+  # ────────────────────────────────────────────────────────────────────────────
   # iOS — one-time: create App Store provisioning profile on Apple
   #
   # Run this ONCE manually in Codemagic (or via a `profile-*` tag) if Fetch
