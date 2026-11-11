@@ -13,6 +13,7 @@ import '../models/salah_prayer.dart';
 import '../state/app_controller.dart';
 import '../utils/app_strings.dart';
 import '../utils/app_theme.dart';
+import '../utils/incoming_call_background.dart';
 import '../utils/system_ui.dart';
 
 /// How the user left the incoming reminder screen. A null route result
@@ -30,7 +31,11 @@ enum IncomingSalahResult {
 
 /// Incoming-call style reminder screen.
 ///
-/// Designed to feel like an important incoming call: expanding ripple rings,
+/// The upper portion is a prayer-specific illustrated scene (one hand-built
+/// image per salah) carrying the title, prayer name, and supporting line.
+/// It's brought to life with a slow Ken Burns drift, a breathing radiant
+/// glow, and a soft light sweep across the art. Below it, a real, animated,
+/// fully accessible Answer/Decline action row — expanding ripple rings,
 /// a glowing pulsing Answer button, gentle ringing haptics.
 ///
 /// The screen always presents exactly two actions — Answer and Decline —
@@ -60,19 +65,31 @@ class IncomingSalahScreen extends StatefulWidget {
 
 class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  /// Drives the expanding "ringing" ripple rings.
-  late final AnimationController _rippleController;
-
   /// Drives the Answer button glow/scale pulse.
   late final AnimationController _pulseController;
 
   /// Drives the periodic ringing wiggle of the Answer button.
   late final AnimationController _shakeController;
 
+  /// Drives the expanding ripple rings behind the Answer button.
+  late final AnimationController _rippleController;
+
+  /// Slow continuous zoom on the hero artwork — subtle "alive" motion.
+  late final AnimationController _kenBurnsController;
+
+  /// Breathing radiant glow layered over the artwork.
+  late final AnimationController _auraController;
+
+  /// Soft diagonal light sweep drifting across the artwork/text.
+  late final AnimationController _shimmerController;
+
+  /// One-shot entrance: fades + scales the whole screen in on arrival.
+  late final AnimationController _entranceController;
+
   Timer? _hapticTimer;
 
-  /// Set once all alerting (vibration, haptics, animation) has been stopped.
-  /// Guards every async/timer callback so nothing continues afterwards.
+  /// Set once all alerting (vibration, haptics, ringing animation) has been
+  /// stopped. Guards every async/timer callback so nothing continues after.
   bool _alertingStopped = false;
 
   /// Set once the user has chosen Answer or Decline, so a second tap (or a
@@ -85,10 +102,6 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _rippleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2600),
-    )..repeat();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1300),
@@ -97,6 +110,26 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2600),
     )..repeat();
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
+    _kenBurnsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 9000),
+    )..repeat(reverse: true);
+    _auraController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4200),
+    )..repeat();
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 750),
+    )..forward();
 
     // Hide system bars without immersiveSticky — that mode was leaving
     // Settings with unstable insets (scroll jump) after Preview returned.
@@ -154,9 +187,9 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
   }
 
   /// Stops ALL alerting immediately: repeating vibration, the haptic loop
-  /// timer, and every animation. Idempotent — safe to call any number of
-  /// times, from any exit path (Answer, Decline, back-out, app lifecycle
-  /// change, disposal).
+  /// timer, and the ringing-specific animations. Idempotent — safe to call
+  /// any number of times, from any exit path (Answer, Decline, back-out, app
+  /// lifecycle change, disposal).
   void _stopAlerting() {
     if (_alertingStopped) return;
     _alertingStopped = true;
@@ -166,11 +199,13 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
       _usingVibrator = false;
       Vibration.cancel();
     }
-    // Stop (don't dispose — dispose() owns that) so ripple/pulse/wiggle
+    // Stop (don't dispose — dispose() owns that) so the pulse/wiggle/ripple
     // freeze instantly rather than animating on after the choice was made.
-    _rippleController.stop();
+    // The ambient scene motion (Ken Burns/aura/shimmer) keeps playing —
+    // it's atmosphere, not a ringing signal — until the route actually pops.
     _pulseController.stop();
     _shakeController.stop();
+    _rippleController.stop();
   }
 
   @override
@@ -191,9 +226,13 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     // externally while the route unwinds, widget tree teardown.
     _stopAlerting();
     WidgetsBinding.instance.removeObserver(this);
-    _rippleController.dispose();
     _pulseController.dispose();
     _shakeController.dispose();
+    _rippleController.dispose();
+    _kenBurnsController.dispose();
+    _auraController.dispose();
+    _shimmerController.dispose();
+    _entranceController.dispose();
     restoreAppSystemUi();
     super.dispose();
   }
@@ -231,186 +270,261 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
   @override
   Widget build(BuildContext context) {
     final theme = AppTheme.forPrayer(widget.prayer);
+    final asset = IncomingCallBackground.assetFor(widget.prayer);
+    final panelTop = theme.gradientBottom;
+    final panelBottom = Color.lerp(theme.gradientBottom, AppTheme.gold, 0.55)!;
+
     return Scaffold(
-      backgroundColor: theme.gradientMid,
-      body: Stack(
+      backgroundColor: panelTop,
+      body: FadeTransition(
+        opacity: CurvedAnimation(parent: _entranceController, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.97, end: 1.0).animate(
+            CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The hero art is cropped to just above the point where the
+              // source illustration's own (non-interactive) button row
+              // begins, so only the arch/title/supporting-line portion
+              // shows — real, accessible buttons live in the panel below.
+              const maxArtFraction = 0.70;
+              const minPanelHeight = 210.0;
+              final renderedImageHeight =
+                  constraints.maxWidth / IncomingCallBackground.nativeAspect;
+              var artHeight = renderedImageHeight * maxArtFraction;
+              if (constraints.maxHeight - artHeight < minPanelHeight) {
+                artHeight = (constraints.maxHeight - minPanelHeight).clamp(
+                  0.0,
+                  renderedImageHeight,
+                );
+              }
+              return Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: artHeight,
+                    child: _HeroArt(
+                      asset: asset,
+                      renderedImageHeight: renderedImageHeight,
+                      fadeToColor: panelTop,
+                      kenBurns: _kenBurnsController,
+                      aura: _auraController,
+                      shimmer: _shimmerController,
+                      accent: theme.accent,
+                    ),
+                  ),
+                  Expanded(
+                    child: _ActionPanel(
+                      theme: theme,
+                      gradientTop: panelTop,
+                      gradientBottom: panelBottom,
+                      pulse: _pulseController,
+                      shake: _shakeController,
+                      ripple: _rippleController,
+                      onAnswer: _answer,
+                      onDecline: _decline,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The illustrated prayer scene, animated with a slow Ken Burns drift, a
+/// breathing radiant glow, and a soft light sweep — then faded seamlessly
+/// into the action panel's background color at the bottom.
+class _HeroArt extends StatelessWidget {
+  final String asset;
+  final double renderedImageHeight;
+  final Color fadeToColor;
+  final Animation<double> kenBurns;
+  final Animation<double> aura;
+  final Animation<double> shimmer;
+  final Color accent;
+
+  const _HeroArt({
+    required this.asset,
+    required this.renderedImageHeight,
+    required this.fadeToColor,
+    required this.kenBurns,
+    required this.aura,
+    required this.shimmer,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: Stack(
         fit: StackFit.expand,
         children: [
-          // Prayer-specific atmosphere gradient.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  theme.gradientTop,
-                  theme.gradientMid,
-                  theme.gradientBottom,
-                ],
-                stops: const [0.0, 0.45, 1.0],
-              ),
-            ),
-          ),
-          // Soft radial glow behind the avatar.
           Align(
-            alignment: const Alignment(0, -0.38),
-            child: Container(
-              width: 380,
-              height: 380,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    theme.accent.withValues(alpha: 0.12),
-                    Colors.transparent,
-                  ],
+            alignment: Alignment.topCenter,
+            child: AnimatedBuilder(
+              animation: kenBurns,
+              builder: (context, child) {
+                final t = Curves.easeInOut.transform(kenBurns.value);
+                return Transform.scale(
+                  scale: 1.0 + 0.045 * t,
+                  alignment: Alignment.topCenter,
+                  child: child,
+                );
+              },
+              child: SizedBox(
+                width: double.infinity,
+                height: renderedImageHeight,
+                child: Image.asset(
+                  asset,
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.topCenter,
                 ),
               ),
             ),
           ),
-          SafeArea(
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                // Ringing avatar with expanding ripple rings.
-                SizedBox(
-                  width: 300,
-                  height: 300,
-                  child: AnimatedBuilder(
-                    animation: _rippleController,
-                    builder:
-                        (context, child) => CustomPaint(
-                          painter: _RipplePainter(
-                            _rippleController.value,
-                            theme.accent,
-                          ),
-                          child: child,
-                        ),
-                    child: Center(
-                      child: Container(
-                        width: 132,
-                        height: 132,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [theme.primary, theme.deep],
-                          ),
-                          border: Border.all(color: theme.accent, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.45),
-                              blurRadius: 30,
-                              offset: const Offset(0, 12),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.mosque_outlined,
-                          size: 60,
-                          color: theme.softAccent,
-                        ),
-                      ),
+          // Soft diagonal light sweep drifting across the art and its
+          // baked-in text, like light moving across glass.
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: shimmer,
+              builder: (context, _) {
+                final t = shimmer.value;
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment(-1.6 + 3.2 * t, -1.0),
+                      end: Alignment(-0.6 + 3.2 * t, 1.0),
+                      colors: [
+                        Colors.transparent,
+                        Colors.white.withValues(alpha: 0.14),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.35, 0.5, 0.65],
                     ),
                   ),
-                ),
-                const SizedBox(height: 28),
-                // 1. Permanent title — honorable, personal, welcoming.
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    AppStrings.incomingCallTitle,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppTheme.ivory,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      height: 1.25,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                // 2. Prayer name (call-style emphasis).
-                Text(
-                  widget.prayer.displayName.toUpperCase(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: theme.softAccent,
-                    fontSize: 36,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 3.5,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // 3. Status — prayer has entered.
-                Text(
-                  AppStrings.prayerEnteredBody(widget.prayer.displayName),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppTheme.ivory.withValues(alpha: 0.88),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                // 4. One short supporting line (prayer-specific only —
-                // never shown together with the generic fallback).
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Text(
-                    AppStrings.incomingSupportingLine(widget.prayer),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: theme.softAccent.withValues(alpha: 0.90),
-                      fontSize: 17,
-                      fontWeight: FontWeight.w400,
-                      height: 1.4,
-                      letterSpacing: 0.15,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-                const Spacer(flex: 3),
-                // Incoming-call action row: red decline-style "later" vs radiant "answer".
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 44),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _CallAction(
-                        label: AppStrings.declineLabel,
-                        labelColor: Colors.red.shade300,
-                        semanticLabel: 'Decline prayer reminder',
-                        semanticHint: 'Dismisses and reminds you again later',
-                        onTap: _decline,
-                        button: _DeclineButton(onTap: _decline),
+                );
+              },
+            ),
+          ),
+          // Breathing radiant glow — "radiating light" over the arch.
+          IgnorePointer(
+            child: Align(
+              alignment: const Alignment(0, 0.3),
+              child: AnimatedBuilder(
+                animation: aura,
+                builder: (context, _) {
+                  final t = Curves.easeInOut.transform(aura.value);
+                  return Container(
+                    width: 240 + 50 * t,
+                    height: 240 + 50 * t,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.16 * t),
+                          accent.withValues(alpha: 0.12 * t),
+                          Colors.transparent,
+                        ],
                       ),
-                      _CallAction(
-                        label: AppStrings.answer,
-                        labelColor: theme.softAccent,
-                        semanticLabel: 'Answer prayer reminder',
-                        semanticHint: 'You are going to pray now',
-                        onTap: _answer,
-                        button: _AnswerButton(
-                          pulse: _pulseController,
-                          shake: _shakeController,
-                          onTap: _answer,
-                          theme: theme,
-                        ),
-                      ),
-                    ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          // Seamless fade into the action panel below.
+          IgnorePointer(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: 150,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, fadeToColor],
                   ),
                 ),
-                const SizedBox(height: 56),
-              ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The bottom action row: Decline / Answer, over a warm gradient panel that
+/// continues the art's atmosphere.
+class _ActionPanel extends StatelessWidget {
+  final PrayerPalette theme;
+  final Color gradientTop;
+  final Color gradientBottom;
+  final Animation<double> pulse;
+  final Animation<double> shake;
+  final Animation<double> ripple;
+  final VoidCallback onAnswer;
+  final VoidCallback onDecline;
+
+  const _ActionPanel({
+    required this.theme,
+    required this.gradientTop,
+    required this.gradientBottom,
+    required this.pulse,
+    required this.shake,
+    required this.ripple,
+    required this.onAnswer,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [gradientTop, gradientBottom],
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(44, 10, 44, 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _CallAction(
+                label: AppStrings.declineLabel,
+                labelColor: Colors.red.shade100,
+                semanticLabel: 'Decline prayer reminder',
+                semanticHint: 'Dismisses and reminds you again later',
+                onTap: onDecline,
+                button: _DeclineButton(onTap: onDecline),
+              ),
+              _CallAction(
+                label: AppStrings.answer,
+                labelColor: AppTheme.ivory,
+                semanticLabel: 'Answer prayer reminder',
+                semanticHint: 'You are going to pray now',
+                onTap: onAnswer,
+                button: _AnswerButtonWithRipple(
+                  pulse: pulse,
+                  shake: shake,
+                  ripple: ripple,
+                  onTap: onAnswer,
+                  theme: theme,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -508,6 +622,51 @@ class _DeclineButton extends StatelessWidget {
   }
 }
 
+/// Wraps [_AnswerButton] with small expanding ripple rings, like the visual
+/// language of a ringing call concentrated around the one action that
+/// matters.
+class _AnswerButtonWithRipple extends StatelessWidget {
+  final Animation<double> pulse;
+  final Animation<double> shake;
+  final Animation<double> ripple;
+  final VoidCallback onTap;
+  final PrayerPalette theme;
+
+  const _AnswerButtonWithRipple({
+    required this.pulse,
+    required this.shake,
+    required this.ripple,
+    required this.onTap,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 150,
+      height: 150,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: ripple,
+            builder:
+                (context, _) => CustomPaint(
+                  painter: _RipplePainter(
+                    ripple.value,
+                    theme.accent,
+                    baseRadius: 42,
+                    maxRadius: 74,
+                  ),
+                ),
+          ),
+          _AnswerButton(pulse: pulse, shake: shake, onTap: onTap, theme: theme),
+        ],
+      ),
+    );
+  }
+}
+
 /// Radiant, pulsing, gently wiggling primary action — the one the eye and
 /// thumb are drawn to, like answering a call.
 class _AnswerButton extends StatelessWidget {
@@ -581,21 +740,29 @@ class _AnswerButton extends StatelessWidget {
   }
 }
 
-/// Expanding, fading concentric rings radiating from the avatar — the visual
-/// language of a ringing call.
+/// Expanding, fading concentric rings — the visual language of a ringing
+/// call. [baseRadius]/[maxRadius] let the same painter serve both a large
+/// avatar (legacy) and a tight ring hugging a single button.
 class _RipplePainter extends CustomPainter {
   final double progress;
   final Color accent;
+  final double baseRadius;
+  final double maxRadius;
 
-  _RipplePainter(this.progress, this.accent);
+  _RipplePainter(
+    this.progress,
+    this.accent, {
+    this.baseRadius = 70,
+    this.maxRadius = 150,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final maxRadius = size.width / 2;
     for (var i = 0; i < 3; i++) {
       final p = (progress + i / 3) % 1.0;
-      final radius = lerpDouble(70, maxRadius, Curves.easeOut.transform(p))!;
+      final radius =
+          lerpDouble(baseRadius, maxRadius, Curves.easeOut.transform(p))!;
       final opacity = (1 - p) * 0.32;
       canvas.drawCircle(
         center,
@@ -610,5 +777,8 @@ class _RipplePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RipplePainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.accent != accent;
+      oldDelegate.progress != progress ||
+      oldDelegate.accent != accent ||
+      oldDelegate.baseRadius != baseRadius ||
+      oldDelegate.maxRadius != maxRadius;
 }

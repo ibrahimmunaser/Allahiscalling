@@ -55,3 +55,18 @@ tool/geodata/
 /android/key.properties
 *.jks
 *.keystore
+
+# Google Cloud / Play Console service account credentials — never tracked.
+*-play-*.json
+themuslimman-play-*.json
+
+# Ad-hoc debug/demo artifacts dropped in the project root while sideloading
+# and testing builds — not part of the app.
+/*.apk
+/*.aab
+/*.mp4
+/*.png
+frame_*.jpg
+/video_frames/
+/images/
+/annotated*.png

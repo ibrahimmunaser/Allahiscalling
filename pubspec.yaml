@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.4+20
+version: 1.0.4+21
 
 environment:
   sdk: ^3.7.0
@@ -96,6 +96,13 @@ flutter:
     # folders per surah (assets/tafsir/surah_XXX/verse_YYY.txt). Verses
     # without a bundled file fall back to a cached network source.
     - assets/tafsir/surah_001/
+    # Incoming-call hero artwork: one illustrated, prayer-specific scene per
+    # salah, used as the background of the "Allah is calling" screen.
+    - assets/incoming_call/fajr.jpg
+    - assets/incoming_call/dhuhr.jpg
+    - assets/incoming_call/asr.jpg
+    - assets/incoming_call/maghrib.jpg
+    - assets/incoming_call/isha.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
