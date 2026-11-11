@@ -56,5 +56,8 @@
 	<!-- AlarmKit (iOS 26+): required to schedule prominent prayer alarms. -->
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Allah Is Calling uses alarms to notify you when it is time for prayer.</string>
+	<!-- Standard HTTPS only; no custom/non-exempt encryption. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

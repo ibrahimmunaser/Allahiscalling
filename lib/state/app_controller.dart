@@ -436,7 +436,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         await schedulerService.rescheduleAll(_settings);
       } catch (e) {
         debugPrint('Scheduling failed: $e');
-        // Surface in the beta diagnostics report (no user data in entry).
+        // Surface in the diagnostics report (no user data in entry).
         await DiagnosticsLog.recordError(
           repository.prefs,
           'scheduling',

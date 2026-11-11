@@ -644,22 +644,24 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                         ),
                       ),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.bug_report_outlined),
-                  title: const Text('Diagnostics (beta)'),
-                  subtitle: const Text(
-                    'Copyable report for beta feedback — no location or '
-                    'prayer history included',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap:
-                      () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const DiagnosticsScreen(),
+                if (kDebugMode) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Diagnostics'),
+                    subtitle: const Text(
+                      'Copyable report for development — no location or '
+                      'prayer history included',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DiagnosticsScreen(),
+                          ),
                         ),
-                      ),
-                ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 import '../services/diagnostics_log.dart';
 import '../state/app_controller.dart';
 
-/// Beta diagnostics report.
+/// Development diagnostics report (debug builds only via Settings).
 ///
 /// Privacy contract — the report deliberately NEVER includes:
 ///   - GPS coordinates (only the location *source type* and timezone),
@@ -159,7 +159,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Diagnostics (beta)'),
+        title: const Text('Diagnostics'),
         actions: [
           IconButton(
             icon: const Icon(Icons.copy),
@@ -178,10 +178,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Text(
-                        'Share this report with the beta team when reporting '
-                        'missed, late, duplicate, or stopped reminders. It '
-                        'includes no location coordinates, prayer history, or '
-                        'personal identifiers.',
+                        'Use this report when debugging missed, late, '
+                        'duplicate, or stopped reminders. It includes no '
+                        'location coordinates, prayer history, or personal '
+                        'identifiers.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),

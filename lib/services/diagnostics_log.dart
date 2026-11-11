@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Privacy-conscious diagnostics log for beta testing.
+/// Privacy-conscious diagnostics log for development troubleshooting.
 ///
 /// Stores only the most recent error events (source tag + exception text +
 /// timestamp) in a small ring buffer. Deliberately contains NO prayer
