@@ -201,9 +201,12 @@ class GuardBlockActivity : Activity() {
     }
 
     /**
-     * Phone-style double buzz tagged as a ringtone/alarm so OEMs don't
-     * swallow a plain one-shot (common when launched over another app).
-     * Also fires a view haptic as a second path.
+     * Phone-style double buzz. Tagged as an ALARM, not a ringtone — a
+     * ringtone-category vibration is silenced by Do Not Disturb / "Vibrate"
+     * ring-mode settings (confirmed the actual cause of the silent block
+     * screen: zen_mode was active), while alarm-category vibration is
+     * designed to bypass exactly that, the same way an alarm clock still
+     * buzzes on a silenced phone. Also fires a view haptic as a second path.
      */
     private fun vibrateOnce() {
         @Suppress("DEPRECATION")
@@ -230,7 +233,7 @@ class GuardBlockActivity : Activity() {
                 vibrator.vibrate(
                     effect,
                     VibrationAttributes.Builder()
-                        .setUsage(VibrationAttributes.USAGE_RINGTONE)
+                        .setUsage(VibrationAttributes.USAGE_ALARM)
                         .build(),
                 )
             } else {
@@ -238,7 +241,7 @@ class GuardBlockActivity : Activity() {
                 vibrator.vibrate(
                     effect,
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build(),
                 )
