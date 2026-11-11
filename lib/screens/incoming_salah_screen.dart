@@ -551,9 +551,10 @@ class _ActionPanel extends StatelessWidget {
   }
 }
 
-/// Radiant light bursting up from the bottom edge of the screen — core glow
-/// plus fine rays — echoing the sunburst baked into the hero artwork above,
-/// so the warmth feels continuous instead of cut off at the crop line.
+/// A soft wash of light rising from the very bottom edge of the panel —
+/// no distinct "sun" disc, no rays, just a gentle glow that breathes
+/// (grows/brightens, then eases back) so it reads as light drifting
+/// upward rather than an object sitting mid-screen.
 class _SunburstGlow extends StatelessWidget {
   final Animation<double> sunburst;
   final Color color;
@@ -566,65 +567,26 @@ class _SunburstGlow extends StatelessWidget {
       animation: sunburst,
       builder: (context, _) {
         final t = Curves.easeInOut.transform(sunburst.value);
-        return Align(
-          alignment: const Alignment(0, 1.55),
-          child: CustomPaint(
-            size: Size.square(520 + 40 * t),
-            painter: _SunburstPainter(color: color, intensity: t),
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.bottomCenter,
+              // Anchored exactly on the bottom edge — the glow's radius
+              // breathes outward/upward, it never detaches into a sphere.
+              radius: 0.95 + 0.25 * t,
+              colors: [
+                Colors.white.withValues(alpha: 0.30 + 0.14 * t),
+                color.withValues(alpha: 0.26 + 0.12 * t),
+                color.withValues(alpha: 0.10 + 0.04 * t),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.32, 0.65, 1.0],
+            ),
           ),
         );
       },
     );
   }
-}
-
-class _SunburstPainter extends CustomPainter {
-  final Color color;
-  final double intensity;
-
-  _SunburstPainter({required this.color, required this.intensity});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final maxRadius = size.width / 2;
-
-    // Fine rays, evenly spaced, fading out toward their tips.
-    const rayCount = 20;
-    for (var i = 0; i < rayCount; i++) {
-      final angle = (math.pi * 2 / rayCount) * i;
-      final rayLength = maxRadius * (0.7 + 0.3 * ((i.isEven) ? intensity : (1 - intensity) * 0.6 + 0.4));
-      final end = center + Offset(math.cos(angle), math.sin(angle)) * rayLength;
-      canvas.drawLine(
-        center,
-        end,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color = Colors.white.withValues(alpha: 0.05 + 0.05 * intensity)
-          ..blendMode = BlendMode.plus,
-      );
-    }
-
-    // Bright core.
-    canvas.drawCircle(
-      center,
-      maxRadius * 0.62,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [
-            Colors.white.withValues(alpha: 0.55 + 0.2 * intensity),
-            color.withValues(alpha: 0.35 + 0.15 * intensity),
-            color.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: maxRadius * 0.62))
-        ..blendMode = BlendMode.plus,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _SunburstPainter oldDelegate) =>
-      oldDelegate.intensity != intensity || oldDelegate.color != color;
 }
 
 /// A circular call action with its label underneath, bottom-aligned so the
