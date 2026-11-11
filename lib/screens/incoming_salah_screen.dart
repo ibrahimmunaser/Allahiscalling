@@ -83,6 +83,9 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
   /// Soft diagonal light sweep drifting across the artwork/text.
   late final AnimationController _shimmerController;
 
+  /// Radiating light bursting from the bottom edge, behind the buttons.
+  late final AnimationController _sunburstController;
+
   /// One-shot entrance: fades + scales the whole screen in on arrival.
   late final AnimationController _entranceController;
 
@@ -126,6 +129,10 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
       vsync: this,
       duration: const Duration(milliseconds: 4200),
     )..repeat();
+    _sunburstController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3400),
+    )..repeat(reverse: true);
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 750),
@@ -232,6 +239,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     _kenBurnsController.dispose();
     _auraController.dispose();
     _shimmerController.dispose();
+    _sunburstController.dispose();
     _entranceController.dispose();
     restoreAppSystemUi();
     super.dispose();
@@ -322,6 +330,7 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
                       pulse: _pulseController,
                       shake: _shakeController,
                       ripple: _rippleController,
+                      sunburst: _sunburstController,
                       onAnswer: _answer,
                       onDecline: _decline,
                     ),
@@ -460,7 +469,8 @@ class _HeroArt extends StatelessWidget {
 }
 
 /// The bottom action row: Decline / Answer, over a warm gradient panel that
-/// continues the art's atmosphere.
+/// continues the art's atmosphere, with light radiating up from the very
+/// bottom edge — like the source artwork's own sunburst, carried through.
 class _ActionPanel extends StatelessWidget {
   final PrayerPalette theme;
   final Color gradientTop;
@@ -468,6 +478,7 @@ class _ActionPanel extends StatelessWidget {
   final Animation<double> pulse;
   final Animation<double> shake;
   final Animation<double> ripple;
+  final Animation<double> sunburst;
   final VoidCallback onAnswer;
   final VoidCallback onDecline;
 
@@ -478,6 +489,7 @@ class _ActionPanel extends StatelessWidget {
     required this.pulse,
     required this.shake,
     required this.ripple,
+    required this.sunburst,
     required this.onAnswer,
     required this.onDecline,
   });
@@ -492,42 +504,127 @@ class _ActionPanel extends StatelessWidget {
           colors: [gradientTop, gradientBottom],
         ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(44, 10, 44, 20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _CallAction(
-                label: AppStrings.declineLabel,
-                labelColor: Colors.red.shade100,
-                semanticLabel: 'Decline prayer reminder',
-                semanticHint: 'Dismisses and reminds you again later',
-                onTap: onDecline,
-                button: _DeclineButton(onTap: onDecline),
-              ),
-              _CallAction(
-                label: AppStrings.answer,
-                labelColor: AppTheme.ivory,
-                semanticLabel: 'Answer prayer reminder',
-                semanticHint: 'You are going to pray now',
-                onTap: onAnswer,
-                button: _AnswerButtonWithRipple(
-                  pulse: pulse,
-                  shake: shake,
-                  ripple: ripple,
-                  onTap: onAnswer,
-                  theme: theme,
-                ),
-              ),
-            ],
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _SunburstGlow(sunburst: sunburst, color: theme.accent),
+            ),
           ),
-        ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(40, 10, 40, 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _CallAction(
+                    label: AppStrings.declineLabel,
+                    labelColor: Colors.white,
+                    semanticLabel: 'Decline prayer reminder',
+                    semanticHint: 'Dismisses and reminds you again later',
+                    onTap: onDecline,
+                    button: _DeclineButton(onTap: onDecline),
+                  ),
+                  _CallAction(
+                    label: AppStrings.answer,
+                    labelColor: AppTheme.ivory,
+                    semanticLabel: 'Answer prayer reminder',
+                    semanticHint: 'You are going to pray now',
+                    onTap: onAnswer,
+                    button: _AnswerButtonWithRipple(
+                      pulse: pulse,
+                      shake: shake,
+                      ripple: ripple,
+                      onTap: onAnswer,
+                      theme: theme,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+/// Radiant light bursting up from the bottom edge of the screen — core glow
+/// plus fine rays — echoing the sunburst baked into the hero artwork above,
+/// so the warmth feels continuous instead of cut off at the crop line.
+class _SunburstGlow extends StatelessWidget {
+  final Animation<double> sunburst;
+  final Color color;
+
+  const _SunburstGlow({required this.sunburst, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: sunburst,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(sunburst.value);
+        return Align(
+          alignment: const Alignment(0, 1.55),
+          child: CustomPaint(
+            size: Size.square(520 + 40 * t),
+            painter: _SunburstPainter(color: color, intensity: t),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SunburstPainter extends CustomPainter {
+  final Color color;
+  final double intensity;
+
+  _SunburstPainter({required this.color, required this.intensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final maxRadius = size.width / 2;
+
+    // Fine rays, evenly spaced, fading out toward their tips.
+    const rayCount = 20;
+    for (var i = 0; i < rayCount; i++) {
+      final angle = (math.pi * 2 / rayCount) * i;
+      final rayLength = maxRadius * (0.7 + 0.3 * ((i.isEven) ? intensity : (1 - intensity) * 0.6 + 0.4));
+      final end = center + Offset(math.cos(angle), math.sin(angle)) * rayLength;
+      canvas.drawLine(
+        center,
+        end,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = Colors.white.withValues(alpha: 0.05 + 0.05 * intensity)
+          ..blendMode = BlendMode.plus,
+      );
+    }
+
+    // Bright core.
+    canvas.drawCircle(
+      center,
+      maxRadius * 0.62,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.55 + 0.2 * intensity),
+            color.withValues(alpha: 0.35 + 0.15 * intensity),
+            color.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromCircle(center: center, radius: maxRadius * 0.62))
+        ..blendMode = BlendMode.plus,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SunburstPainter oldDelegate) =>
+      oldDelegate.intensity != intensity || oldDelegate.color != color;
 }
 
 /// A circular call action with its label underneath, bottom-aligned so the
@@ -585,6 +682,10 @@ class _CallAction extends StatelessWidget {
 /// Red Decline button — visually matches the "end/decline call" button on
 /// every smartphone, making the dichotomy between the two actions
 /// immediately legible. The behavior is still a respectful snooze.
+///
+/// Sized to match [_AnswerButton] and given a soft outer halo + a bright
+/// rim so it reads clearly as a distinct, tappable button rather than a
+/// flat sticker on top of the panel's own gradient.
 class _DeclineButton extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -592,31 +693,63 @@ class _DeclineButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const red = Color(0xFFD32F2F);
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: red.withValues(alpha: 0.38),
-            blurRadius: 18,
-            spreadRadius: 1,
+    const red = Color(0xFFE23E3E);
+    return SizedBox(
+      width: 108,
+      height: 108,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Soft outer halo for contrast against the gradient panel.
+          Container(
+            width: 108,
+            height: 108,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  red.withValues(alpha: 0.28),
+                  red.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.55),
+                width: 1.4,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: red.withValues(alpha: 0.5),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: red,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                customBorder: const CircleBorder(),
+                child: const SizedBox(
+                  width: 82,
+                  height: 82,
+                  child: Icon(Icons.call_end, size: 34, color: Colors.white),
+                ),
+              ),
+            ),
           ),
         ],
-      ),
-      child: Material(
-        color: red,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: const SizedBox(
-            width: 78,
-            height: 78,
-            child: Icon(Icons.call_end, size: 34, color: Colors.white),
-          ),
-        ),
       ),
     );
   }
@@ -654,9 +787,9 @@ class _AnswerButtonWithRipple extends StatelessWidget {
                 (context, _) => CustomPaint(
                   painter: _RipplePainter(
                     ripple.value,
-                    theme.accent,
-                    baseRadius: 42,
-                    maxRadius: 74,
+                    Colors.white,
+                    baseRadius: 48,
+                    maxRadius: 75,
                   ),
                 ),
           ),
@@ -697,43 +830,86 @@ class _AnswerButton extends StatelessWidget {
         final p = Curves.easeInOut.transform(pulse.value);
         return Transform.rotate(
           angle: _angle(shake.value),
-          child: Transform.scale(
-            scale: 1.0 + 0.05 * p,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.accent.withValues(alpha: 0.30 + 0.25 * p),
-                    blurRadius: 22 + 16 * p,
-                    spreadRadius: 2 + 5 * p,
-                  ),
-                ],
-              ),
-              child: child,
-            ),
-          ),
+          child: Transform.scale(scale: 1.0 + 0.05 * p, child: child),
         );
       },
-      child: Material(
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: Ink(
-          width: 90,
-          height: 90,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [theme.softAccent, theme.accent],
+      child: SizedBox(
+        width: 112,
+        height: 112,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Soft outer halo for contrast against the panel's own warm
+            // gradient — without it the button nearly vanished into it.
+            AnimatedBuilder(
+              animation: pulse,
+              builder: (context, _) {
+                final p = Curves.easeInOut.transform(pulse.value);
+                return Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.30 + 0.12 * p),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: Icon(Icons.call, size: 36, color: theme.onAccent),
-          ),
+            AnimatedBuilder(
+              animation: pulse,
+              builder: (context, child) {
+                final p = Curves.easeInOut.transform(pulse.value);
+                return Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      width: 1.6,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.accent.withValues(alpha: 0.45 + 0.25 * p),
+                        blurRadius: 22 + 16 * p,
+                        spreadRadius: 2 + 5 * p,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: child,
+                );
+              },
+              child: Material(
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: Ink(
+                  width: 82,
+                  height: 82,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [theme.softAccent, theme.accent],
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: onTap,
+                    customBorder: const CircleBorder(),
+                    child: Icon(Icons.call, size: 34, color: theme.onAccent),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
