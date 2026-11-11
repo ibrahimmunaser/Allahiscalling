@@ -280,7 +280,12 @@ class _IncomingSalahScreenState extends State<IncomingSalahScreen>
     final theme = AppTheme.forPrayer(widget.prayer);
     final asset = IncomingCallBackground.assetFor(widget.prayer);
     final panelTop = theme.gradientBottom;
-    final panelBottom = Color.lerp(theme.gradientBottom, AppTheme.gold, 0.55)!;
+    // Blend toward THIS prayer's own accent, not a universal gold — gold
+    // flatters Asr/Maghrib's warm scenes but turns Fajr/Isha's cool blues
+    // into a muddy grey. Each palette's accent was already tuned to sit
+    // well against its own gradientBottom, so the glow stays cohesive
+    // (warm sun for Asr/Dhuhr/Maghrib, cool moonlight for Fajr/Isha).
+    final panelBottom = Color.lerp(theme.gradientBottom, theme.accent, 0.5)!;
 
     return Scaffold(
       backgroundColor: panelTop,

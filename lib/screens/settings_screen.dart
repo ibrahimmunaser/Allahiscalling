@@ -6,8 +6,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation.dart';
+import '../models/prayer_day_times.dart';
 import '../models/prayer_settings.dart';
 import '../models/salah_prayer.dart';
+import '../models/scheduled_reminder.dart';
 import '../state/app_controller.dart';
 import '../utils/app_strings.dart';
 import '../utils/app_theme.dart';
@@ -20,8 +22,8 @@ import 'incoming_salah_screen.dart';
 import 'manual_location_screen.dart';
 import 'privacy_policy_screen.dart';
 
-String _alarmKitSubtitle(AppController controller) {
-  switch (controller.alarmKitAuthStatus) {
+String _alarmKitSubtitle(String alarmKitAuthStatus) {
+  switch (alarmKitAuthStatus) {
     case 'authorized':
       return 'Prominent prayer alarms are enabled';
     case 'denied':
@@ -68,20 +70,60 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<AppController>();
-    final settings = controller.settings;
+    // Scoped selects instead of context.watch<AppController>(): this screen
+    // used to rebuild its entire ~900-line ListView on every single
+    // notifyListeners() call anywhere in the app (location refresh, AlarmKit
+    // polling, prayer-watch ticks, guard toggles elsewhere, etc.), even when
+    // none of those changes touched anything this screen renders. If one of
+    // those unrelated rebuilds landed while the user's finger was mid-drag,
+    // the whole children list got reconstructed and could visibly reflow —
+    // this was the root cause of "scroll up slowly, it glitches back down".
+    // Selecting only the specific fields actually read below means this
+    // screen now only rebuilds when one of them truly changes.
+    final controller = context.read<AppController>();
+    final settings = context.select<AppController, PrayerSettings>(
+      (c) => c.settings,
+    );
+    final notificationsPermitted = context.select<AppController, bool>(
+      (c) => c.notificationsPermitted,
+    );
+    final alarmKitAvailable = context.select<AppController, bool>(
+      (c) => c.alarmKitAvailable,
+    );
+    final alarmKitAuthorized = context.select<AppController, bool>(
+      (c) => c.alarmKitAuthorized,
+    );
+    final alarmKitAuthStatus = context.select<AppController, String>(
+      (c) => c.alarmKitAuthStatus,
+    );
+    final exactAlarmsAvailable = context.select<AppController, bool>(
+      (c) => c.exactAlarmsAvailable,
+    );
+    final guardSupported = context.select<AppController, bool>(
+      (c) => c.guardSupported,
+    );
+    final today = context.select<AppController, PrayerDayTimes?>(
+      (c) => c.today,
+    );
+    final nextReminder = context.select<AppController, ScheduledReminder?>(
+      (c) => c.nextReminder,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
+      // SingleChildScrollView + Column, not a lazy ListView. The sliver
+      // list was recomputing maxScrollExtent by hundreds of pixels while a
+      // finger was dragging (children entering and leaving the cache), and
+      // that correction is what snapped the page back down mid-scroll.
+      body: SingleChildScrollView(
         controller: _scrollController,
-        // Clamping avoids rubber-band fights with system inset changes that
-        // looked like "glitching" when scrolling back up on some devices.
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
         ),
         padding: const EdgeInsets.all(16),
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           _SectionHeader('Location'),
           Card(
             child: Column(
@@ -321,7 +363,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                             ),
                       ),
                 ),
-                if (!controller.notificationsPermitted) ...[
+                if (!notificationsPermitted) ...[
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(
@@ -335,18 +377,17 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                     onTap: controller.requestNotificationPermission,
                   ),
                 ],
-                if (controller.alarmKitAvailable) ...[
+                if (alarmKitAvailable) ...[
                   const Divider(height: 1),
                   ListTile(
                     leading: Icon(
-                      controller.alarmKitAuthorized
+                      alarmKitAuthorized
                           ? Icons.alarm_on_outlined
                           : Icons.alarm_off_outlined,
-                      color:
-                          controller.alarmKitAuthorized ? null : Colors.orange,
+                      color: alarmKitAuthorized ? null : Colors.orange,
                     ),
                     title: const Text('Prayer alarms (AlarmKit)'),
-                    subtitle: Text(_alarmKitSubtitle(controller)),
+                    subtitle: Text(_alarmKitSubtitle(alarmKitAuthStatus)),
                     onTap: () async {
                       final messenger = ScaffoldMessenger.of(context);
                       if (controller.alarmKitAuthStatus == 'denied') {
@@ -369,7 +410,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                       );
                     },
                   ),
-                  if (controller.alarmKitAuthStatus == 'denied') ...[
+                  if (alarmKitAuthStatus == 'denied') ...[
                     const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.settings_outlined),
@@ -378,7 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                     ),
                   ],
                 ],
-                if (!controller.exactAlarmsAvailable) ...[
+                if (!exactAlarmsAvailable) ...[
                   const Divider(height: 1),
                   const ListTile(
                     leading: Icon(
@@ -399,7 +440,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
             ),
           ),
           const SizedBox(height: 16),
-          if (controller.guardSupported) ...[
+          if (guardSupported) ...[
             const _AppGuardSection(),
             const SizedBox(height: 16),
           ],
@@ -465,11 +506,11 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child:
-                  controller.today == null
+                  today == null
                       ? const Text('Prayer times unavailable.')
                       : Column(
                         children: [
-                          ...controller.today!.orderedEntries.map(
+                          ...today.orderedEntries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Row(
@@ -491,9 +532,9 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                                 style: TextStyle(fontWeight: FontWeight.w600),
                               ),
                               Text(
-                                controller.nextReminder == null
+                                nextReminder == null
                                     ? 'None scheduled'
-                                    : '${controller.nextReminder!.prayer.displayName} • ${formatDateTime(controller.nextReminder!.scheduledAt.toLocal())}',
+                                    : '${nextReminder.prayer.displayName} • ${formatDateTime(nextReminder.scheduledAt.toLocal())}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -520,7 +561,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                     );
                   },
                 ),
-                if (kDebugMode && controller.alarmKitAvailable) ...[
+                if (kDebugMode && alarmKitAvailable) ...[
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.alarm_add_outlined),
@@ -644,8 +685,9 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
             ),
           ),
           const SizedBox(height: 24),
-        ],
-      ),
+            ],
+          ),
+        ),
     );
   }
 
@@ -814,9 +856,16 @@ class _AppGuardSectionState extends State<_AppGuardSection>
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<AppController>();
-    final enabled = controller.guardEnabled;
-    final guardedCount = controller.guardedPackages.length;
+    // Scoped selects (see _SettingsScreenState.build for why): this section
+    // used to rebuild on any AppController change at all, which made its
+    // conditional permission/"Test guard now" blocks reflow mid-scroll.
+    final controller = context.read<AppController>();
+    final enabled = context.select<AppController, bool>(
+      (c) => c.guardEnabled,
+    );
+    final guardedCount = context.select<AppController, int>(
+      (c) => c.guardedPackages.length,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1088,8 +1137,10 @@ class _IosAppGuardSectionState extends State<_IosAppGuardSection> {
   Widget build(BuildContext context) {
     if (_supported != true) return const SizedBox.shrink();
 
-    final controller = context.watch<AppController>();
-    final enabled = controller.guardEnabled;
+    final controller = context.read<AppController>();
+    final enabled = context.select<AppController, bool>(
+      (c) => c.guardEnabled,
+    );
     final authorized = _authStatus == 'approved';
 
     return Column(

@@ -1,48 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Native "Allah Is Calling" block screen. Deliberately NOT a Flutter
-     Activity: a second Flutter engine started from a background service was
-     painting only the window background (solid green) and never the Dart
-     UI — see GuardBlockActivity.kt. -->
+<!-- Block screen using the prayer-call layout: illustrated salah scene,
+     bottom glow, and the same Answer / Decline buttons as the incoming
+     call. Wording stays the guard copy (set again in GuardBlockActivity). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/guard_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/guard_deep_green"
-    android:fitsSystemWindows="true">
+    android:background="@color/guard_deep_green">
+
+    <ImageView
+        android:id="@+id/guard_hero"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="matrix" />
+
+    <View
+        android:id="@+id/guard_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <View
+        android:id="@+id/guard_glow"
+        android:layout_width="match_parent"
+        android:layout_height="280dp"
+        android:layout_gravity="bottom" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:paddingStart="28dp"
-        android:paddingEnd="28dp"
-        android:paddingTop="48dp"
-        android:paddingBottom="32dp">
+        android:paddingStart="32dp"
+        android:paddingTop="56dp"
+        android:paddingEnd="32dp"
+        android:paddingBottom="28dp">
 
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <!-- Avatar circle -->
-        <FrameLayout
-            android:layout_width="132dp"
-            android:layout_height="132dp"
-            android:background="@drawable/guard_avatar_circle">
-
-            <ImageView
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:src="@mipmap/ic_launcher"
-                android:scaleType="centerInside" />
-        </FrameLayout>
+            android:layout_weight="1.15" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="28dp"
             android:gravity="center"
             android:letterSpacing="0.02"
             android:text="Allah Is Calling"
@@ -54,7 +56,7 @@
             android:id="@+id/guard_prayer_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="14dp"
             android:gravity="center"
             android:letterSpacing="0.18"
             android:text="PRAYER"
@@ -67,7 +69,7 @@
             android:id="@+id/guard_headline"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="18dp"
             android:gravity="center"
             android:lineSpacingMultiplier="1.25"
             android:text="Your apps have been blocked.\nGet up and pray."
@@ -79,7 +81,7 @@
             android:id="@+id/guard_unlock_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             android:gravity="center"
             android:text="Your apps unlock in"
             android:textColor="@color/guard_ivory_dim"
@@ -89,7 +91,7 @@
             android:id="@+id/guard_countdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:gravity="center"
             android:letterSpacing="0.06"
             android:text="15:00"
@@ -100,13 +102,13 @@
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_weight="1.4" />
+            android:layout_weight="1.5" />
 
         <TextView
             android:id="@+id/guard_actions_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
+            android:layout_marginBottom="16dp"
             android:gravity="center"
             android:text="Feel the call — Answer &amp; Decline unlock after 5 rings"
             android:textColor="@color/guard_ivory_dim"
@@ -117,9 +119,7 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="24dp">
+            android:paddingBottom="12dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -130,22 +130,21 @@
 
                 <ImageButton
                     android:id="@+id/guard_decline"
-                    android:layout_width="78dp"
-                    android:layout_height="78dp"
+                    android:layout_width="108dp"
+                    android:layout_height="108dp"
                     android:background="@drawable/guard_decline_circle"
                     android:contentDescription="Decline"
-                    android:padding="20dp"
+                    android:padding="37dp"
                     android:scaleType="centerInside"
-                    android:src="@android:drawable/ic_menu_call"
-                    android:tint="@android:color/white" />
+                    android:src="@drawable/ic_guard_call_end" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:text="Decline"
-                    android:textColor="#EF9A9A"
-                    android:textSize="14sp"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -158,22 +157,23 @@
 
                 <ImageButton
                     android:id="@+id/guard_answer"
-                    android:layout_width="90dp"
-                    android:layout_height="90dp"
+                    android:layout_width="108dp"
+                    android:layout_height="108dp"
                     android:background="@drawable/guard_answer_circle"
                     android:contentDescription="Answer"
-                    android:padding="22dp"
+                    android:padding="37dp"
                     android:scaleType="centerInside"
-                    android:src="@android:drawable/ic_menu_call"
+                    android:src="@drawable/ic_guard_call"
                     android:tint="@color/guard_deep_green" />
 
                 <TextView
+                    android:id="@+id/guard_answer_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:text="Answer"
-                    android:textColor="@color/guard_soft_gold"
-                    android:textSize="14sp"
+                    android:textColor="@color/guard_ivory"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
