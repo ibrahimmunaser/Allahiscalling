@@ -84,6 +84,15 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:exported="false" />
+
+        <!-- Fires at the exact moment a prayer enters and force-launches
+             the app when "Display over other apps" is granted, so the call
+             screen takes over even while the phone is unlocked and in
+             another app (the ordinary notification's fullScreenIntent only
+             auto-presents while the device is locked). -->
+        <receiver
+            android:name=".IncomingCallAlarmReceiver"
+            android:exported="false" />
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
             android:exported="false">

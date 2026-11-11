@@ -13,6 +13,7 @@ import '../utils/app_strings.dart';
 import 'app_guard_service.dart';
 import 'decline_flow.dart';
 import 'diagnostics_log.dart';
+import 'incoming_call_alarm_service.dart';
 import 'ios_alarmkit_service.dart';
 import 'ios_hybrid_notification_scheduler.dart';
 import 'timezone_service.dart';
@@ -157,6 +158,7 @@ class LocalNotificationService implements NotificationScheduler {
 
   final FlutterLocalNotificationsPlugin _plugin;
   final AppGuardService _appGuard;
+  final IncomingCallAlarmService _incomingCallAlarm;
 
   /// Called when the user taps a notification or its "Pray Now" action while
   /// the app is running (foreground/background). [actionId] is null for a
@@ -167,8 +169,23 @@ class LocalNotificationService implements NotificationScheduler {
   LocalNotificationService([
     FlutterLocalNotificationsPlugin? plugin,
     AppGuardService? appGuard,
+    IncomingCallAlarmService? incomingCallAlarm,
   ]) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-       _appGuard = appGuard ?? AppGuardService();
+       _appGuard = appGuard ?? AppGuardService(),
+       _incomingCallAlarm = incomingCallAlarm ?? IncomingCallAlarmService();
+
+  /// Whether "Display over other apps" is granted — without it, the primary
+  /// reminder can only force-launch via the ordinary full-screen-intent
+  /// notification, which Android downgrades to a tap-required heads-up
+  /// banner while the device is unlocked. Surfaced in Settings.
+  Future<bool> hasIncomingCallOverlayPermission() =>
+      _incomingCallAlarm.hasOverlayPermission();
+
+  /// Consumes a pending prayer recorded by the native direct-launch alarm,
+  /// if the app was just force-foregrounded (or is cold-starting into) one.
+  /// Call once at startup and on every app resume.
+  Future<SalahPrayer?> consumePendingIncomingCall() =>
+      _incomingCallAlarm.consumePending();
 
   /// Deterministic ID per prayer occurrence: identical inputs always produce
   /// the same ID, so rescheduling replaces instead of duplicating.
@@ -420,6 +437,18 @@ class LocalNotificationService implements NotificationScheduler {
           triggerAt: scheduledAt,
         ),
       );
+      // Direct-launch alarm (Android only; see IncomingCallAlarmService):
+      // force-foregrounds the app at this same moment when overlay
+      // permission is granted, so the call screen takes over even while
+      // the notification above would only show as a tappable heads-up
+      // banner (device unlocked and in another app).
+      unawaited(
+        _incomingCallAlarm.schedule(
+          id: id,
+          prayer: prayer,
+          triggerAt: scheduledAt,
+        ),
+      );
       return const PrimaryReminderOutcome.notification();
     } catch (e) {
       // _zonedSchedule already retries inexact on a PlatformException; this
@@ -582,14 +611,17 @@ class LocalNotificationService implements NotificationScheduler {
 
   @override
   Future<void> cancel(int id) {
-    // Harmless no-op on non-Android/when no guard window was ever scheduled
-    // for this id (follow-ups, snoozes, the refresh notification).
+    // Harmless no-op on non-Android/when no guard window or direct-launch
+    // alarm was ever scheduled for this id (follow-ups, snoozes, the
+    // refresh notification).
     unawaited(_appGuard.cancelGuardWindow(id));
+    unawaited(_incomingCallAlarm.cancel(id));
     return _plugin.cancel(id);
   }
 
   Future<void> cancelAll() {
     unawaited(_appGuard.cancelAllGuardWindows());
+    unawaited(_incomingCallAlarm.cancelAll());
     return _plugin.cancelAll();
   }
 

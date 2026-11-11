@@ -394,6 +394,7 @@ class _SettingsScreenState extends State<SettingsScreen> with RouteAware {
                     ),
                   ),
                 ],
+                if (!kIsWeb && Platform.isAndroid) const _ReliableCallScreenTile(),
               ],
             ),
           ),
@@ -936,6 +937,77 @@ class _AppGuardSectionState extends State<_AppGuardSection>
               ],
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Nudges the user to grant "Display over other apps" so the primary call
+/// screen reliably takes over at prayer time — not just when the device is
+/// locked (Android's own behavior for the ordinary full-screen notification;
+/// see IncomingCallAlarmService). Independent of App Guard, which uses the
+/// same permission but is a separate, optional feature.
+class _ReliableCallScreenTile extends StatefulWidget {
+  const _ReliableCallScreenTile();
+
+  @override
+  State<_ReliableCallScreenTile> createState() =>
+      _ReliableCallScreenTileState();
+}
+
+class _ReliableCallScreenTileState extends State<_ReliableCallScreenTile>
+    with WidgetsBindingObserver {
+  bool? _granted;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final granted =
+        await context.read<AppController>().hasReliableCallScreenPermission();
+    if (!mounted || _granted == granted) return;
+    setState(() => _granted = granted);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_granted == true) return const SizedBox.shrink();
+    return Column(
+      children: [
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(
+            Icons.phone_in_talk_outlined,
+            color: Colors.orange,
+          ),
+          title: const Text('Make the call screen always take over'),
+          subtitle: const Text(
+            'Without "Display over other apps", the call screen only '
+            'covers the screen when your phone is locked — otherwise it is '
+            'just a notification you have to tap. Grant it for a reliable '
+            'takeover every time.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () async {
+            await context.read<AppController>().requestGuardOverlayPermission();
+            await _refresh();
+          },
         ),
       ],
     );

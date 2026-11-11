@@ -76,6 +76,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// the app is already visible.
   void Function(SalahPrayer prayer)? onPrayerEntered;
 
+  /// Set by the app shell: called when a native direct-launch alarm
+  /// (Android; see IncomingCallAlarmService) already force-foregrounded the
+  /// app before [onPrayerEntered] could fire — e.g. the app was killed or
+  /// backgrounded in another app when the prayer entered. Checked at
+  /// startup and on every resume; complements [onPrayerEntered], which only
+  /// fires while the app is already visible.
+  void Function(SalahPrayer prayer)? onPendingIncomingCall;
+
   PrayerSettings _settings = const PrayerSettings();
   PrayerDayTimes? _today;
   ScheduledReminder? _nextReminder;
@@ -251,6 +259,23 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _schedulePrayerWatch();
     _initialized = true;
     notifyListeners();
+
+    // Android: a prayer may have entered (and force-launched the app — see
+    // IncomingCallAlarmService) while this cold start was already underway.
+    unawaited(_checkPendingIncomingCall());
+  }
+
+  /// Checks for a prayer recorded by the native direct-launch alarm and, if
+  /// found, hands it to [onPendingIncomingCall]. No-op (and cheap) on every
+  /// platform/build where nothing is pending. Called at startup and on
+  /// every app resume — see [_onAppResumed].
+  Future<void> _checkPendingIncomingCall() async {
+    try {
+      final prayer = await notificationService.consumePendingIncomingCall();
+      if (prayer != null) onPendingIncomingCall?.call(prayer);
+    } catch (e) {
+      debugPrint('_checkPendingIncomingCall failed: $e');
+    }
   }
 
   @override
@@ -262,6 +287,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _onAppResumed() async {
+    // The direct-launch alarm (Android) may be exactly why the app just
+    // resumed — check before anything else so the call screen appears
+    // immediately rather than after the recalculation work below.
+    unawaited(_checkPendingIncomingCall());
+
     // Timezone may have changed while the app was backgrounded (travel/DST
     // zone updates), and the day may have rolled over.
     var needsReschedule = false;
@@ -875,6 +905,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> guardHasOverlayPermission() =>
       appGuardService.hasOverlayPermission();
+
+  /// Whether "Display over other apps" is granted — independent of whether
+  /// App Guard is enabled. Without it, the primary call screen can only
+  /// appear via the ordinary notification, which Android only auto-presents
+  /// full-screen while the device is locked (otherwise it is a tap-required
+  /// heads-up banner). Requested via [requestGuardOverlayPermission] — the
+  /// same system permission either feature uses.
+  Future<bool> hasReliableCallScreenPermission() =>
+      notificationService.hasIncomingCallOverlayPermission();
 
   Future<void> requestGuardUsageAccess() =>
       appGuardService.requestUsageAccess();

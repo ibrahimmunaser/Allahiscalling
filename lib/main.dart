@@ -214,6 +214,12 @@ Future<void> main() async {
   // it complements the lock-screen full-screen intent.
   controller.onPrayerEntered = (prayer) => presentIncomingScreen(prayer);
 
+  // Android: the native direct-launch alarm already force-foregrounded the
+  // app (or is cold-starting it right now) because the device was unlocked
+  // and in another app when the prayer entered — see
+  // IncomingCallAlarmService. Checked at startup and on every resume.
+  controller.onPendingIncomingCall = (prayer) => presentIncomingScreen(prayer);
+
   // AlarmKit Answer: foreground / background while Flutter is alive.
   if (alarmKitService != null) {
     alarmKitService.ensureListening();

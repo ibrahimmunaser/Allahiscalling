@@ -8,5 +8,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(AppGuardPlugin())
+        flutterEngine.plugins.add(IncomingCallPlugin())
     }
 }
