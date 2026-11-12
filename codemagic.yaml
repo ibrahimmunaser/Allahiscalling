@@ -53,6 +53,10 @@ workflows:
       tag_patterns:
         - pattern: 'v*'
           include: true
+        # Android-only builds (APK/AAB) without also starting ios-release.
+        # A normal v* tag still builds both platforms.
+        - pattern: 'android-v*'
+          include: true
 
     scripts:
       - name: Get Flutter packages
