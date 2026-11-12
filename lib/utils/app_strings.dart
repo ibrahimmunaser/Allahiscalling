@@ -18,6 +18,10 @@ class AppStrings {
   // Incoming call screen permanent title.
   static const String incomingCallTitle = 'Allah Is Calling';
 
+  // Incoming call screen headline, shown under the prayer name — paired
+  // with exactly one supporting line (see [incomingSupportingLine]) below.
+  static const String incomingHeadline = 'Allah is calling\nyou to prayer.';
+
   // Notification copy.
   static const String notificationTitle = 'Allah Is Calling';
 
