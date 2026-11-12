@@ -30,7 +30,12 @@ class AppGuardManager: NSObject {
         if #available(iOS 16.0, *) {
             switch call.method {
             case "isSupported":
-                result(true)
+                // FamilyControls imports on any iOS 16 SDK, including builds
+                // that were not granted the distribution entitlement. The
+                // Settings toggle must stay hidden in that case — requesting
+                // authorization then fails immediately and App Review treats
+                // the error as a broken core feature.
+                result(screenTimeGuardEnabled())
             case "authorizationStatus":
                 result(authorizationStatusString())
             case "requestAuthorization":
@@ -69,6 +74,13 @@ class AppGuardManager: NSObject {
         default:
             result(nil)
         }
+    }
+
+    /// True only when this build was signed with Family Controls. The
+    /// Codemagic Screen Time setup script sets the Info.plist flag in the
+    /// same step that injects the entitlement.
+    private func screenTimeGuardEnabled() -> Bool {
+        Bundle.main.object(forInfoDictionaryKey: "ScreenTimeGuardEnabled") as? Bool ?? false
     }
 
     #if canImport(FamilyControls)

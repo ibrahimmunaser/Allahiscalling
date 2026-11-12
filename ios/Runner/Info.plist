@@ -59,5 +59,12 @@
 	<!-- Standard HTTPS only; no custom/non-exempt encryption. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- App Guard stays hidden until Family Controls is actually signed
+	     into this build. setup_screen_time_targets.rb flips this to true
+	     only when ENABLE_SCREEN_TIME_EXTENSIONS=1. Leaving it false keeps
+	     the Settings toggle out of App Store builds that cannot request
+	     Screen Time access. -->
+	<key>ScreenTimeGuardEnabled</key>
+	<false/>
 </dict>
 </plist>

@@ -65,6 +65,16 @@ end
 
 puts "Runner.entitlements now includes family-controls + application-groups (#{RUNNER_ENTITLEMENTS})."
 
+INFO_PLIST = File.join(ROOT, 'Runner', 'Info.plist')
+if plistbuddy_has_key?(INFO_PLIST, 'ScreenTimeGuardEnabled')
+  system("#{PLISTBUDDY} -c \"Set :ScreenTimeGuardEnabled true\" \"#{INFO_PLIST}\"") ||
+    abort("Failed to enable ScreenTimeGuardEnabled in #{INFO_PLIST}")
+else
+  system("#{PLISTBUDDY} -c \"Add :ScreenTimeGuardEnabled bool true\" \"#{INFO_PLIST}\"") ||
+    abort("Failed to add ScreenTimeGuardEnabled to #{INFO_PLIST}")
+end
+puts "Info.plist ScreenTimeGuardEnabled is true — Settings will show App Guard."
+
 EXTENSIONS = [
   {
     name: 'DeviceActivityMonitorExtension',
