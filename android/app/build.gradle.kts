@@ -1,5 +1,6 @@
 import java.util.Base64
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -99,10 +100,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         applicationId = "com.salahinvite.allah_invites_you_to_salah"
         minSdk = flutter.minSdkVersion
@@ -153,6 +150,14 @@ android {
                 signingConfig = signingConfigs.getByName("debug")
             }
         }
+    }
+}
+
+// AGP 9 / current Kotlin Gradle Plugin: nested android.kotlinOptions is a
+// script compilation error. Configure JVM target via the top-level DSL.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
